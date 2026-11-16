@@ -53,6 +53,7 @@ actual fun PlatformWebView(
     onProgressChange: (Float) -> Unit,
     onTitleChange: (String) -> Unit,
     onNavigateToSchedule: () -> Unit,
+    onPageLoaded: (url: String) -> Unit,
     onSslError: (failingUrl: String, onProceed: () -> Unit, onCancel: () -> Unit) -> Unit
 ) {
     Box(

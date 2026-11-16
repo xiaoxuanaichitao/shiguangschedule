@@ -53,12 +53,12 @@ import shiguangschedule.shared.generated.resources.item_github_repo
 import shiguangschedule.shared.generated.resources.item_language_settings
 import shiguangschedule.shared.generated.resources.item_open_source_licenses
 import shiguangschedule.shared.generated.resources.item_start_screen_settings
-import shiguangschedule.shared.generated.resources.item_update_repo
 import shiguangschedule.shared.generated.resources.label_version_prefix
 import shiguangschedule.shared.generated.resources.language_24px
 import shiguangschedule.shared.generated.resources.list_alt_24px
 import shiguangschedule.shared.generated.resources.palette_24px
 import shiguangschedule.shared.generated.resources.people_alt_24px
+import shiguangschedule.shared.generated.resources.school_24px
 import shiguangschedule.shared.generated.resources.theme_settings_title
 import shiguangschedule.shared.generated.resources.title_more_options
 import shiguangschedule.shared.generated.resources.update_24px
@@ -220,11 +220,11 @@ fun MoreOptionsScreen(
                         onClick = { onNavigate(Destination.OpenSourceLicenses) }
                     )
 
-                    // 更新适配仓库
+                    // 矿大统一身份认证绑定
                     SettingListItem(
-                        icon = vectorResource(Res.drawable.update_24px),
-                        title = stringResource(Res.string.item_update_repo),
-                        onClick = { onNavigate(Destination.UpdateRepo) }
+                        icon = vectorResource(Res.drawable.school_24px),
+                        title = "矿大统一身份认证",
+                        onClick = { onNavigate(Destination.CumtAuth) }
                     )
 
                     // 贡献者

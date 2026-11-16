@@ -28,8 +28,8 @@ class ContributionRepository {
             val bytes = Res.readBytes("files/contributors_data/contributors.json")
             val jsonString = bytes.decodeToString()
             return@withContext json.decodeFromString<ContributionList>(jsonString)
-        } catch (e: Exception) {
-            throw Exception("无法加载或解析贡献者数据文件", e)
+        } catch (_: Exception) {
+            return@withContext ContributionList(appDev = emptyList(), jiaowuadapter = emptyList())
         }
     }
 }

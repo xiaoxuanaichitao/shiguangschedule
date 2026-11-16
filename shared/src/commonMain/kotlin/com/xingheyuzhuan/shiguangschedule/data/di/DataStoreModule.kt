@@ -33,12 +33,12 @@ class DataStoreModule {
     }
 
     @Single
-    @Named("SchoolHistory")
-    fun provideSchoolHistoryDataStore(
+    @Named("CumtData")
+    fun provideCumtDataStore(
         @Named("FilesDir") filesDir: Path
     ): DataStore<Preferences> {
         return PreferenceDataStoreFactory.createWithPath(
-            produceFile = { filesDir / "datastore" / "school_history.preferences_pb" }
+            produceFile = { filesDir / "datastore" / "cumt_data.preferences_pb" }
         )
     }
 

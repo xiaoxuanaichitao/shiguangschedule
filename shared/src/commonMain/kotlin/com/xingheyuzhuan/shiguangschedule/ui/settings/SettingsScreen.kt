@@ -411,6 +411,11 @@ private fun AdvancedSettingsSection(onNavigate: (Destination) -> Unit) {
                 fontWeight = FontWeight.SemiBold
             )
             SettingItem(
+                title = "矿大统一身份认证",
+                subtitle = "绑定学号以直连校园卡、图书馆与教务自动填充",
+                onClick = { onNavigate(Destination.CumtAuth) }
+            )
+            SettingItem(
                 title = stringResource(Res.string.item_course_conversion),
                 subtitle = stringResource(Res.string.desc_course_conversion),
                 onClick = { onNavigate(Destination.CourseTableConversion) }

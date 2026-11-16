@@ -1,6 +1,6 @@
 <resources>
     <!-- 应用基础信息 -->
-    <string name="app_name">拾光课程表</string>
+    <string name="app_name">矿大拾光</string>
 
     <!-- 通用按钮和提示信息 -->
     <string name="action_confirm">确定</string>
@@ -333,8 +333,8 @@
     <string name="item_export_ics_file">日历文件导出</string>
     <string name="desc_export_ics_with_alarm">导出ics文件,点击生成指定提醒时间参数的文件</string>
     <string name="section_school_import">教务导入</string>
-    <string name="item_school_system_import">教务系统导入</string>
-    <string name="desc_school_import_quick">从教务系统导入课程，方便快捷</string>
+    <string name="item_school_system_import">矿大教务导入</string>
+    <string name="desc_school_import_quick">从矿大本科或研究生教务系统一键导入课表</string>
     <string name="dialog_title_select_import_table">选择要导入的目标课表</string>
     <string name="dialog_title_select_export_table">选择要导出的课表</string>
     <string name="dialog_title_ics_export_settings">日历导出设置</string>

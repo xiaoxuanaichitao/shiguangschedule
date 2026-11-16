@@ -64,6 +64,7 @@ import org.jetbrains.compose.resources.vectorResource
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.account_circle_24px
 import shiguangschedule.shared.generated.resources.account_circle_filled_24px
+import shiguangschedule.shared.generated.resources.explore_24px
 import shiguangschedule.shared.generated.resources.nav_course_schedule
 import shiguangschedule.shared.generated.resources.nav_settings
 import shiguangschedule.shared.generated.resources.nav_today_schedule
@@ -96,19 +97,22 @@ fun AdaptiveNavigationScaffold(
 ) {
     val todayLabel = stringResource(Res.string.nav_today_schedule)
     val courseLabel = stringResource(Res.string.nav_course_schedule)
+    val campusLabel = "校园"
     val settingsLabel = stringResource(Res.string.nav_settings)
 
     val todaySelectedIcon = vectorResource(Res.drawable.view_agenda_filled_24px)
     val todayUnselectedIcon = vectorResource(Res.drawable.view_agenda_24px)
     val courseSelectedIcon = vectorResource(Res.drawable.view_week_filled_24px)
     val courseUnselectedIcon = vectorResource(Res.drawable.view_week_24px)
+    val campusIcon = vectorResource(Res.drawable.explore_24px)
     val settingsSelectedIcon = vectorResource(Res.drawable.account_circle_filled_24px)
     val settingsUnselectedIcon = vectorResource(Res.drawable.account_circle_24px)
 
     val navItems = remember(
-        todayLabel, courseLabel, settingsLabel,
+        todayLabel, courseLabel, campusLabel, settingsLabel,
         todaySelectedIcon, todayUnselectedIcon,
         courseSelectedIcon, courseUnselectedIcon,
+        campusIcon,
         settingsSelectedIcon, settingsUnselectedIcon
     ) {
         listOf(
@@ -123,6 +127,12 @@ fun AdaptiveNavigationScaffold(
                 destination = Destination.CourseSchedule,
                 selectedIcon = courseSelectedIcon,
                 unselectedIcon = courseUnselectedIcon
+            ),
+            NavItemData(
+                label = campusLabel,
+                destination = Destination.CampusDiscover,
+                selectedIcon = campusIcon,
+                unselectedIcon = campusIcon
             ),
             NavItemData(
                 label = settingsLabel,
@@ -212,8 +222,8 @@ fun AdaptiveNavigationScaffold(
                                     navItems = navItems,
                                     currentDestination = currentDestination,
                                     onTabSelected = onTabSelected,
-                                    minSpacing = 8.dp,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                    minSpacing = 4.dp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
                                 )
                             }
                         }

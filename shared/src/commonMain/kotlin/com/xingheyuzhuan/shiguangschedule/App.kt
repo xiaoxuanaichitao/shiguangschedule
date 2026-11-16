@@ -23,12 +23,23 @@ import androidx.navigation3.runtime.metadata
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAutoLoginCoordinator
 import com.xingheyuzhuan.shiguangschedule.data.model.StartScreen
 import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdaptiveNavigationScaffold
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CampusDiscoverScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAuthScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusCardScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusNetScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCourseImportScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtDormPowerScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtExamScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtJwxtExtractScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtLibraryScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSchoolBusScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreMappingScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreScreen
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.WeeklyScheduleScreen
-import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.list.AdapterSelectionScreen
-import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.list.SchoolSelectionListScreen
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebViewScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
@@ -53,15 +64,20 @@ import com.xingheyuzhuan.shiguangschedule.ui.settings.themesettings.ThemeSetting
 import com.xingheyuzhuan.shiguangschedule.ui.settings.time.ComboScheduleEditScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.time.SingleScheduleEditScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.time.TimeScheduleManagementScreen
-import com.xingheyuzhuan.shiguangschedule.ui.settings.update.UpdateRepoScreen
 import com.xingheyuzhuan.shiguangschedule.ui.theme.ShiguangScheduleTheme
 import com.xingheyuzhuan.shiguangschedule.ui.today.TodayScheduleScreen
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun App() {
     val viewModel: SettingsViewModel = koinViewModel()
     val state by viewModel.uiState.collectAsState()
+    val autoLoginCoordinator: CumtAutoLoginCoordinator = koinInject()
+
+    LaunchedEffect(Unit) {
+        autoLoginCoordinator.tryAutoLoginOnStartup()
+    }
 
     if (state.isReady) {
         ShiguangScheduleTheme(settings = state.appSettings) {
@@ -184,15 +200,14 @@ fun ScreenContent(
             onBack = onBack,
             onNavHideFractionChanged = onNavHideFractionChanged
         )
+        Destination.CampusDiscover -> CampusDiscoverScreen(onNavigate)
         Destination.Settings -> SettingsScreen(onNavigate, onBack)
         Destination.TodaySchedule -> TodayScheduleScreen(onNavigate, onBack)
         Destination.ManageCourseTables -> ManageCourseTablesScreen(onBack)
-        Destination.SchoolSelectionListScreen -> SchoolSelectionListScreen(onNavigate, onBack)
         Destination.CourseTableConversion -> CourseTableConversionScreen(onNavigate, onBack)
         Destination.NotificationSettings -> NotificationSettingsScreen(onBack)
         Destination.MoreOptions -> MoreOptionsScreen(onNavigate, onBack)
         Destination.OpenSourceLicenses -> OpenSourceLicensesScreen(onBack)
-        Destination.UpdateRepo -> UpdateRepoScreen(onBack)
         Destination.QuickActions -> QuickActionsScreen(onNavigate, onBack)
         Destination.TweakSchedule -> TweakScheduleScreen(onBack)
         Destination.ContributionList -> ContributionScreen(onBack)
@@ -204,6 +219,18 @@ fun ScreenContent(
         Destination.LanguageSettings -> LanguageSettingScreen(onBack)
         Destination.WidgetStyleSettings -> WidgetStyleSettingsScreen(onBack)
         Destination.HolidayManagement -> HolidayManagementScreen(onBack = onBack)
+
+        Destination.CumtAuth -> CumtAuthScreen(onNavigate, onBack)
+        Destination.CumtCourseImport -> CumtCourseImportScreen(onNavigate, onBack)
+        is Destination.CumtJwxtExtract -> CumtJwxtExtractScreen(targetDest.mode, onBack)
+        Destination.CumtExams -> CumtExamScreen(onNavigate, onBack)
+        Destination.CumtScores -> CumtScoreScreen(onNavigate, onBack)
+        Destination.CumtScoreMappings -> CumtScoreMappingScreen(onBack)
+        Destination.CumtLibrary -> CumtLibraryScreen(onNavigate, onBack)
+        Destination.CumtCampusCard -> CumtCampusCardScreen(onNavigate, onBack)
+        Destination.CumtDormPower -> CumtDormPowerScreen(onNavigate, onBack)
+        Destination.CumtCampusNet -> CumtCampusNetScreen(onNavigate, onBack)
+        Destination.CumtSchoolBus -> CumtSchoolBusScreen(onNavigate, onBack)
 
         Destination.TimeScheduleManagement -> TimeScheduleManagementScreen(
             onBack = onBack,
@@ -230,9 +257,6 @@ fun ScreenContent(
             onBack = onBack
         )
 
-        is Destination.AdapterSelection -> AdapterSelectionScreen(
-            onNavigate, onBack, targetDest.schoolId, targetDest.schoolName, targetDest.categoryNumber, targetDest.resourceFolder
-        )
         is Destination.WebView -> WebViewScreen(
             onNavigate, onBack, targetDest.initialUrl, targetDest.assetJsPath
         )

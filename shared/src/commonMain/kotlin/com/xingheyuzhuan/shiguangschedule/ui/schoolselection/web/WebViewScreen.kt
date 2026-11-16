@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +28,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,6 +37,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,7 +126,10 @@ fun WebViewScreen(
     var pageTitle by remember { mutableStateOf(if (startedEmpty) titleEnterUrl else titleLoading) }
 
     var expanded by remember { mutableStateOf(false) }
-    var isDesktopMode by remember { mutableStateOf(false) }
+    var isDesktopMode by remember(assetJsPath) {
+        mutableStateOf(assetJsPath == CumtWebScripts.KEY_BK || assetJsPath == CumtWebScripts.KEY_YJS)
+    }
+    var pendingTermPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
     var isEditingUrl by remember { mutableStateOf(startedEmpty) }
     var isDevToolsEnabled by remember { mutableStateOf(false) }
     var showCourseTablePicker by remember { mutableStateOf(false) }
@@ -357,6 +364,13 @@ fun WebViewScreen(
                 onProgressChange = { loadingProgress = it },
                 onTitleChange = { pageTitle = it },
                 onNavigateToSchedule = { onNavigate(Destination.CourseSchedule) },
+                onPageLoaded = { loadedUrl ->
+                    coroutineScope.launch {
+                        viewModel.getAutoFillScript(loadedUrl)?.let { js ->
+                            webViewController.executeScript(js)
+                        }
+                    }
+                },
                 onSslError = { failingUrl, onProceed, onCancel ->
                     uiEventChannel.trySend(
                         WebUiEvent.ShowSslWarning(
@@ -387,24 +401,83 @@ fun WebViewScreen(
                         showCourseTablePicker = false
                         val tableId = selectedTable.id
 
-                        try {
-                            val fileSystem = viewModel.fileSystem
-                            val jsFilePath = viewModel.filesDir / "repo" / "schools" / "resources" / assetJsPath
-
-                            if (fileSystem.exists(jsFilePath)) {
-                                val jsCode = fileSystem.read(jsFilePath) { readUtf8() }
-                                bridgeHandler.setImportTableId(tableId)
-
-                                val fullJsScript = "window.currentTableId = '$tableId';\n$jsCode"
-                                webViewController.executeScript(fullJsScript)
-
-                                ToastManager.show(toastExecutingImport)
-                            } else {
-                                ToastManager.show(toastImportNotFoundFmt.replace("%s", jsFilePath.toString()))
+                        if (assetJsPath == CumtWebScripts.KEY_BK || assetJsPath == CumtWebScripts.KEY_YJS) {
+                            val isYjs = assetJsPath == CumtWebScripts.KEY_YJS
+                            ToastManager.show(toastExecutingImport)
+                            webViewController.evaluateJavascript(CumtWebScripts.extractCourseDomHtmlJs(isYjs)) { raw ->
+                                val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
+                                if (html.isBlank()) {
+                                    ToastManager.show("未读取到页面内容，请先登录后再试")
+                                    return@evaluateJavascript
+                                }
+                                viewModel.importCumtCourses(tableId, isYjs, html) { result ->
+                                    result.fold(
+                                        onSuccess = { (count, suggestedDate) ->
+                                            ToastManager.show("成功导入 $count 门矿大课程")
+                                            if (!suggestedDate.isNullOrBlank()) {
+                                                pendingTermPrompt = tableId to suggestedDate
+                                            } else {
+                                                onNavigate(Destination.CourseSchedule)
+                                            }
+                                        },
+                                        onFailure = { err ->
+                                            ToastManager.show(err.message ?: "导入失败")
+                                        }
+                                    )
+                                }
                             }
-                        } catch (e: Exception) {
-                            ToastManager.show(toastLoadImportFailedFmt.replace("%s", e.message ?: ""))
+                        } else {
+                            try {
+                                val fileSystem = viewModel.fileSystem
+                                val jsFilePath = viewModel.filesDir / "repo" / "schools" / "resources" / assetJsPath
+
+                                if (fileSystem.exists(jsFilePath)) {
+                                    val jsCode = fileSystem.read(jsFilePath) { readUtf8() }
+                                    bridgeHandler.setImportTableId(tableId)
+
+                                    val fullJsScript = "window.currentTableId = '$tableId';\n$jsCode"
+                                    webViewController.executeScript(fullJsScript)
+
+                                    ToastManager.show(toastExecutingImport)
+                                } else {
+                                    ToastManager.show(toastImportNotFoundFmt.replace("%s", jsFilePath.toString()))
+                                }
+                            } catch (e: Exception) {
+                                ToastManager.show(toastLoadImportFailedFmt.replace("%s", e.message ?: ""))
+                            }
                         }
+                    }
+                )
+            }
+
+            pendingTermPrompt?.let { (targetTableId, suggestedDate) ->
+                AlertDialog(
+                    onDismissRequest = {
+                        pendingTermPrompt = null
+                        onNavigate(Destination.CourseSchedule)
+                    },
+                    title = { Text("同步学期开学日期") },
+                    text = {
+                        Text("检测到教务学期对应的参考开学日期为 $suggestedDate，是否同时应用到该课表？（也可稍后在「设置」中调整）")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                pendingTermPrompt = null
+                                viewModel.applyTermStartDate(targetTableId, suggestedDate) {
+                                    ToastManager.show("已更新开学日期为 $suggestedDate")
+                                    onNavigate(Destination.CourseSchedule)
+                                }
+                            }
+                        ) { Text("应用并查看课表") }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                pendingTermPrompt = null
+                                onNavigate(Destination.CourseSchedule)
+                            }
+                        ) { Text("暂不修改") }
                     }
                 )
             }

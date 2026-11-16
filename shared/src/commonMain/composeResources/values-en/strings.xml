@@ -1,6 +1,6 @@
 <resources>
     <!-- Basic App Information -->
-    <string name="app_name">Shiguang Schedule</string>
+    <string name="app_name">CUMT Shiguang</string>
 
     <!-- Common Buttons and Messages -->
     <string name="action_confirm">Confirm</string>
@@ -287,8 +287,8 @@
     <string name="item_export_ics_file">Export calendar file</string>
     <string name="desc_export_ics_with_alarm">Export ICS file with specified reminder time</string>
     <string name="section_school_import">Academic system import</string>
-    <string name="item_school_system_import">Import from academic system</string>
-    <string name="desc_school_import_quick">Import courses from academic system, quick and easy</string>
+    <string name="item_school_system_import">CUMT Academic Import</string>
+    <string name="desc_school_import_quick">Import courses from CUMT undergraduate or graduate system</string>
     <string name="dialog_title_select_import_table">Select target schedule for import</string>
     <string name="dialog_title_select_export_table">Select schedule to export</string>
     <string name="dialog_title_ics_export_settings">Calendar export settings</string>

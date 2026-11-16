@@ -79,7 +79,6 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.serialization.cbor)
                 implementation(libs.kotlinx.datetime)
-                implementation(libs.kgit)
                 implementation(libs.okio)
 
                 // Ktor 核心网络库
@@ -159,16 +158,6 @@ wire {
     }
 }
 
-// 打包离线资源 Task
-val packSchoolsZip = tasks.register<Zip>("packSchoolsZip") {
-    group = "build"
-    description = "将离线适配资源打包为 composeResources ZIP 资源文件。"
-
-    from(layout.projectDirectory.dir("assets/offline_repo"))
-    destinationDirectory.set(layout.projectDirectory.dir("src/commonMain/composeResources/files"))
-    archiveFileName.set("offline_schools.zip")
-}
-
 // 绑定生成 Task 至 Compose Resources 编译生命周期
 val exportLibraryDefinitions = tasks.named("exportLibraryDefinitions")
 
@@ -177,6 +166,5 @@ tasks.matching {
             it.name.startsWith("copyNonXmlValueResources") ||
             it.name.startsWith("prepareComposeResources")
 }.configureEach {
-    dependsOn(packSchoolsZip)
     dependsOn(exportLibraryDefinitions)
 }

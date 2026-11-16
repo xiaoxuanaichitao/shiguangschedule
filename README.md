@@ -1,131 +1,28 @@
-<div align="center">
+# 矿大拾光（CUMT Shiguang）
 
-# 拾光课程表
+基于 [xiaoxuanaichitao/shiguangschedule](https://github.com/xiaoxuanaichitao/shiguangschedule) 重构定制的**中国矿业大学专属课表与校园服务客户端**，全面整合 [xiaoxuanaichitao/FlyingKxz](https://github.com/xiaoxuanaichitao/FlyingKxz)（矿小助）全部核心功能，并移除其他学校与多校仓库体系，专为矿大学子打造极简、无广告的课程与校园工具体验。
 
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/XingHeYuZhuan/shiguangschedule/total)  ![GitHub License](https://img.shields.io/github/license/XingHeYuZhuan/shiguangschedule)  ![GitHub Repo stars](https://img.shields.io/github/stars/XingHeYuZhuan/shiguangschedule)
+## 已整合核心功能
 
-<a href="https://hellogithub.com/repository/XingHeYuZhuan/shiguangschedule" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=9f09baa3931a4f79940100829d4d0ca4&claim_uid=TRP24EpKZ5sx68l&theme=neutral" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-<a href="https://trendshift.io/repositories/45835?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-45835" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/45835/daily?language=Kotlin" alt="XingHeYuZhuan%2Fshiguangschedule | Trendshift" width="250" height="55"/></a>
+### 课表与日程基础（拾光课表）
+- 默认采用矿大 12 节课标准作息时间（08:00-22:35，每节 50 分钟）
+- 今日课表、周课表多视图、自定义调课、公共/组合与个人作息方案
+- Android 桌面小组件、上课前通知提醒 / 自动免打扰、系统日历双向同步、ICS/JSON 导入导出
 
-#### 与我们交流和讨论 ![](https://img.shields.io/badge/QQ_频道-pd68794181-blue)
+### 中国矿业大学专属功能（矿小助全量直连整合）
+- **统一身份认证绑定**：Kotlin 纯客户端实现 CAS AES-128-CBC 加密与令牌认证，直连矿大 `authserver.cumt.edu.cn`，不经过任何第三方中转服务器，凭据使用系统密钥本地加密保存
+- **矿大教务一键导课表**：
+  - 本科生正方教务（`jwxt.cumt.edu.cn`）：支持学分、单双周、跨节块及参考开学日期解析，支持自动填表
+  - 研究生管理系统（`yjsxt.cumt.edu.cn`）：自动导航至个人课表页并解析 `rowspan` 跨行与多课程块
+- **考试倒计时**：教务系统分页抓取与暂存导入、自定义倒计时增删、待考/全部/已结束筛选、临考高亮进度条
+- **成绩查询与绩点计算器**：教务分页抓取与暂存、准确计算**加权平均绩点 (GPA)** 与**加权平均成绩**、支持自选课程纳入估算、倍率调节（1.0 / 1.2 / 自定义）、搜索与排序、自定义非数字等级（如优秀/良好/合格）换算表及分项明细网页直达
+- **矿大图书馆**：CAS SSO 直连 `findcumt.libsp.com`，支持在借图书查询、封面展示、逾期预警、单本/一键全部续借、历史借阅与馆藏检索（附图星 OPAC 官网检索入口）
+- **校园一卡通**：CAS 直连 `yktm.cumt.edu.cn` 查询实时余额、近 20 条消费/充值流水及一卡通在线充值大厅
+- **宿舍电量**：支持南湖研梅 / 杏苑 / 松竹 / 桃苑实时余量查询、环形电量仪表盘、绑定位保存与购电跳转
+- **校园网快捷认证**：支持南湖 / 文昌校区及校园网 / 电信 / 联通 / 移动四大接入方式，多账号历史保存与切换、开启 App 检测 Wi-Fi 自动认证、注销及自助服务入口
+- **矿大校车与校历**：南湖/文昌双校区南北线工作日与节假日全部发车时刻表、1 小时内发车倒计时高亮、停靠站点详情、校历及校外 VPN 官方指南
 
-本仓库为拾光课程表（shiguangschedule）项目的主仓库，包含软件的全部源代码及相关资源。项目采用开源模式，欢迎社区开发者参与贡献和适配。
+## 构建与 CI 说明
 
-</div>  
-
-
-## 预览图
-| 周课表页面(支持长按调整课程块位置或者高度) | 课表页面个性化配置(深色模式演示) | 小组件选择 |
-| :---: | :---: | :---: |
-| ![图片1](/picture/Screenshot_1.png) | ![图片2](/picture/Screenshot_2.png) | ![图片3](/picture/Screenshot_3.png) |
-
-## 项目定位
-
-拾光课程表是一款面向中国高校师生的课程表管理工具，支持通过适配脚本导入各类教务系统课程数据，方便用户高效管理个人课表。项目注重开放性和可扩展性，鼓励社区开发者参与适配和功能完善。
-
-
-## 关于项目版本
-> [!WARNING]
-> 从**2.x**版本开始项目已迁移到Compose Multiplatform多平台框架  
-> 不再区分正式版本和开发者版本，开发者功能通过在**更多**页面点击应用图标**5次**启用
-> - Android：支持Android 8.0 +的系统版本
->   - *主支维护*
-> - Desktop (JVM)：支持Windows、macOS、Linux
->   - *主支维护*
->   - **当前平台处于实验性阶段**
-> - iOS：本仓库dev_ios分支提供实验性基础支持
->   - *分支维护*
->   - **需自行编译**
-> - 其他平台适配正在开发中
-
-## 功能介绍
-
-### 主页面
-- 今日课表
-  > 顾名思义就是看当天的课程
-- 课表
-  > 显示一周的课程，左右滑动可以切换周次，点击顶部周次标题会弹出底部选择器用于快速跳转周次(会标记当前日期所在周)
-- 我的
-  > 也就是设置页面，这里放置所有的配置项
-
-#### 深色适配
-- 目前软件所有可以实现深色适配的位置都已全部实现深色适配
-- 小组件也拥有深色适配
-
-#### 课表配置
-- 支持时间列表与课表绑定,切换不同的课表自动改变时间
-- 课表支持独立定义，一周的起始日是周一还是周日
-  
-#### 小组件  
-- 多种功能小组件任其选择  
-  > [全部小组件预览图](/picture/all_widget.png)。
-- 小组件支持明日预告
-  > 超小小组件不支持明日预告,因为只有2x1的尺寸,设计上是用来展示最近一节课的消息  
-
-#### 全局课程管理  
-- 独立的课程管理页面将所有课程以最直接的方式全局显示出来，支持快速添加以及修改  
-
-#### 课表页面个性化配置  
-- 支持自定义背景图片  
-- 支持调整课表格子高度、圆角、间距及透明度  
-- 支持自定义课程块颜色  
-- 支持调整课程块内容样式  
-- 更多功能等你去发现...
-
-#### 课程导入与导出  
-- json文件导入与导出，方便课表备份  
-- 通用ics文件导出，支持多种设备以及平台的日程导入 
-- 在支持的设备上支持同步日历日程账户
-- 支持WebDAV云备份和同步
-- 教务导入，开源适配仓库开发者深度适配学校作息时间，一键导入  
-  > 识别课程与对应作息时间是适配的基础功能，更高级的自动配置开学日期等 与开发者是否适配学校可能拥有的接口有关  
-
-#### 课程提醒相关  
-- 课程提醒与上课自动化开启勿扰或者静音  
-- 获取整年节假日数据防止节假日课程打扰  
-  
-#### 语言支持  
-- 简体中文 
-- 繁体中文 
-- 英语  
------
-
-## 如何参与
-
-1. Fork 本仓库，提交你的改进或教务适配使用的可调用组件。
-2. 提交 Pull Request，等待审核合并(main分支已经开启分支保护,提交需要提交到dev分支)。
-3. 如有问题或建议，欢迎在 GitHub 提交 Issue 或加入社区讨论。
-
-## 相关链接
-
-- 项目主页：[https://github.com/XingHeYuZhuan/shiguangschedule](https://github.com/XingHeYuZhuan/shiguangschedule)
-- 适配脚本仓库：[https://github.com/XingHeYuZhuan/shiguang_warehouse](https://github.com/XingHeYuZhuan/shiguang_warehouse)
-- 查看如何适配,Wiki：[https://github.com/XingHeYuZhuan/shiguangschedule/wiki](https://github.com/XingHeYuZhuan/shiguangschedule/wiki)
-- 浏览器测试插件:[https://github.com/XingHeYuZhuan/shiguang_Tester](https://github.com/XingHeYuZhuan/shiguang_Tester)  
-
-- ###### 由[@Jursin](https://github.com/Jursin)主导并维护的网站:[https://sgschedule.jursin.top/](https://sgschedule.jursin.top/)  
----
-
-如有问题或建议，欢迎提交 Issue 或 PR。
-
-## 贡献  
-欢迎任何人提交你的贡献  
-### 教务适配贡献  
-<a href="https://github.com/XingHeYuZhuan/shiguang_warehouse/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=XingHeYuZhuan/shiguang_warehouse" />
-</a>
-
-### 软件开发贡献  
-<a href="https://github.com/XingHeYuZhuan/shiguangschedule/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=XingHeYuZhuan/shiguangschedule" />
-</a>
-
-
-## Star 历史
-<a href="https://www.star-history.com/?repos=XingHeYuZhuan%2Fshiguangschedule&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=XingHeYuZhuan/shiguangschedule&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=XingHeYuZhuan/shiguangschedule&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=XingHeYuZhuan/shiguangschedule&type=timeline&legend=top-left" />
- </picture>
-</a>
+- 主构建目标为 **Android**（`.github/workflows/ci-build.yml` 在 `ubuntu-latest` + JDK 21 环境下自动运行单元测试与 Debug/Release APK 构建）。
+- 桌面端构建任务可在 GitHub Actions 通过 `workflow_dispatch` 按需触发。

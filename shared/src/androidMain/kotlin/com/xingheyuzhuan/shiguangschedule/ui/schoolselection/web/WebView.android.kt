@@ -108,6 +108,7 @@ actual fun PlatformWebView(
     onProgressChange: (Float) -> Unit,
     onTitleChange: (String) -> Unit,
     onNavigateToSchedule: () -> Unit,
+    onPageLoaded: (url: String) -> Unit,
     onSslError: (failingUrl: String, onProceed: () -> Unit, onCancel: () -> Unit) -> Unit
 ) {
     val androidController = controller as? AndroidWebViewController
@@ -115,6 +116,7 @@ actual fun PlatformWebView(
     val currentOnProgressChange by rememberUpdatedState(onProgressChange)
     val currentOnTitleChange by rememberUpdatedState(onTitleChange)
     val currentIsDesktopMode by rememberUpdatedState(isDesktopMode)
+    val currentOnPageLoaded by rememberUpdatedState(onPageLoaded)
     val currentOnSslError by rememberUpdatedState(onSslError)
 
     var loadedBaseUrl by remember { mutableStateOf("") }
@@ -207,6 +209,9 @@ actual fun PlatformWebView(
                                 if (unquoted.isNotBlank() && unquoted != "null") {
                                     currentOnTitleChange(unquoted)
                                 }
+                            }
+                            if (!url.isNullOrBlank()) {
+                                currentOnPageLoaded(url)
                             }
                         }
 

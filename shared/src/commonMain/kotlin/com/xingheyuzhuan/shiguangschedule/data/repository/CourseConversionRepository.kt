@@ -221,8 +221,8 @@ class CourseConversionRepository(
         validateTimeSlotsOrThrow(timeSlots)
 
         val existingTimeTable = timeScheduleRepository.getTimeTableById(tableId).first()
-        val newClassDuration = defaultClassDuration ?: existingTimeTable?.defaultClassDuration ?: 45
-        val newBreakDuration = defaultBreakDuration ?: existingTimeTable?.defaultBreakDuration ?: 10
+        val newClassDuration = defaultClassDuration ?: existingTimeTable?.defaultClassDuration ?: 50
+        val newBreakDuration = defaultBreakDuration ?: existingTimeTable?.defaultBreakDuration ?: 5
 
         val timeTableToSave = TimeTable(
             id = tableId,
@@ -455,8 +455,8 @@ class CourseConversionRepository(
                     name = targetTable?.name ?: "公共作息",
                     startDate = rule.startDate,
                     endDate = rule.endDate,
-                    defaultClassDuration = targetTable?.defaultClassDuration ?: 45,
-                    defaultBreakDuration = targetTable?.defaultBreakDuration ?: 10,
+                    defaultClassDuration = targetTable?.defaultClassDuration ?: 50,
+                    defaultBreakDuration = targetTable?.defaultBreakDuration ?: 5,
                     timeSlots = targetSlots.map { slot ->
                         TimeSlotJsonModel(
                             number = slot.number,
@@ -483,8 +483,8 @@ class CourseConversionRepository(
         val exportConfig = CourseConfigJsonModel(
             semesterStartDate = configToExport.semesterStartDate,
             semesterTotalWeeks = configToExport.semesterTotalWeeks,
-            defaultClassDuration = effectiveTimeTable?.defaultClassDuration ?: 45,
-            defaultBreakDuration = effectiveTimeTable?.defaultBreakDuration ?: 10,
+            defaultClassDuration = effectiveTimeTable?.defaultClassDuration ?: 50,
+            defaultBreakDuration = effectiveTimeTable?.defaultBreakDuration ?: 5,
             firstDayOfWeek = configToExport.firstDayOfWeek
         )
 

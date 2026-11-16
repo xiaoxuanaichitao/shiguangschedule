@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # 配置信息
-REPO_APP="ShiGuangSchedule/shiguangschedule"
-REPO_JIAOWU="ShiGuangSchedule/shiguang_warehouse"
+REPO_APP="xiaoxuanaichitao/shiguangschedule"
+REPO_JIAOWU="xiaoxuanaichitao/FlyingKxz"
 
 API_URL_APP="https://api.github.com/repos/${REPO_APP}/contributors"
 API_URL_JIAOWU="https://api.github.com/repos/${REPO_JIAOWU}/contributors"

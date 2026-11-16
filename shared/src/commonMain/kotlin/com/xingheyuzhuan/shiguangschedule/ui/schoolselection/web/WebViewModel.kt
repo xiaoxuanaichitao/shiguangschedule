@@ -2,11 +2,18 @@ package com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
+import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfig
 import com.xingheyuzhuan.shiguangschedule.data.repository.AppSettingsRepository
+import com.xingheyuzhuan.shiguangschedule.data.repository.CourseConversionRepository
+import com.xingheyuzhuan.shiguangschedule.data.sync.WidgetDataSynchronizer
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import okio.FileSystem
 import okio.Path
 import org.koin.core.annotation.KoinViewModel
@@ -15,6 +22,9 @@ import org.koin.core.annotation.Named
 @KoinViewModel
 class WebViewModel(
     private val appSettingsRepository: AppSettingsRepository,
+    private val courseConversionRepository: CourseConversionRepository,
+    private val cumtLocalRepository: CumtLocalRepository,
+    private val widgetDataSynchronizer: WidgetDataSynchronizer,
     @Named("FilesDir") val filesDir: Path,
     val fileSystem: FileSystem
 ) : ViewModel() {
@@ -25,4 +35,63 @@ class WebViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = false
         )
+
+    suspend fun getAutoFillScript(url: String): String? {
+        val creds = cumtLocalRepository.getSavedCredentials()
+        return CumtWebScripts.autoFillAndNavigateJs(
+            url = url,
+            username = creds?.first.orEmpty(),
+            password = creds?.second.orEmpty()
+        )
+    }
+
+    fun importCumtCourses(
+        tableId: String,
+        isYjs: Boolean,
+        html: String,
+        onResult: (Result<Pair<Int, String?>>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = runCatching {
+                val (courses, suggestedDate) = if (isYjs) {
+                    CumtParsers.parseYjsCourseHtml(html) to null
+                } else {
+                    val res = CumtParsers.parseBkCourseHtml(html)
+                    res.courses to res.suggestedTermStartDate
+                }
+                if (courses.isEmpty()) {
+                    error("当前页面未检测到课表数据，请确认已查询并显示课表后再试")
+                }
+                courseConversionRepository.importCourses(tableId, courses)
+                courseConversionRepository.importTimeSlots(
+                    tableId = tableId,
+                    timeSlots = CumtWebScripts.presetTimeSlots,
+                    defaultClassDuration = 50,
+                    defaultBreakDuration = 5
+                )
+                val settings = appSettingsRepository.getAppSettingsOnce()
+                appSettingsRepository.insertOrUpdateAppSettings(
+                    settings.copy(currentCourseTableId = tableId)
+                )
+                widgetDataSynchronizer.syncNow()
+                courses.size to suggestedDate
+            }
+            onResult(result)
+        }
+    }
+
+    fun applyTermStartDate(tableId: String, startDate: String, onDone: () -> Unit) {
+        viewModelScope.launch {
+            runCatching {
+                val existing = appSettingsRepository.getCourseConfigOnce(tableId)
+                    ?: CourseTableConfig(courseTableId = tableId)
+                appSettingsRepository.insertOrUpdateCourseConfig(
+                    existing.copy(semesterStartDate = startDate)
+                )
+                widgetDataSynchronizer.syncNow()
+                Unit
+            }
+            onDone()
+        }
+    }
 }

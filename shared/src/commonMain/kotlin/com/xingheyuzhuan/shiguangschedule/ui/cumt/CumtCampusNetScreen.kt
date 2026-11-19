@@ -1,10 +1,9 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,25 +13,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,10 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -68,7 +70,6 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
-import shiguangschedule.shared.generated.resources.arrow_back_24px
 import shiguangschedule.shared.generated.resources.delete_24px
 import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.wifi_24px
@@ -172,7 +173,6 @@ class CumtCampusNetViewModel(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CumtCampusNetScreen(
     onNavigate: (Destination) -> Unit,
@@ -204,15 +204,14 @@ fun CumtCampusNetScreen(
         }
     }
 
+    val wifiConnected = viewModel.isWifiConnected
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("校园网快捷登录") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.arrow_back_24px), contentDescription = "返回")
-                    }
-                },
+            CumtTopBar(
+                title = "校园网快捷登录",
+                subtitle = "${selectedCampus.displayName} · ${selectedIsp.displayName}",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = { showHelpDialog = true }) {
                         Icon(vectorResource(Res.drawable.info_24px), contentDescription = "认证说明")
@@ -229,67 +228,143 @@ fun CumtCampusNetScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
-            // 自动认证设置卡片
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            // Wi-Fi 状态与自动认证卡片
+            CumtHeroGradientCard(
+                gradientColors = if (wifiConnected) {
+                    listOf(Color(0xFF6B3CC9), Color(0xFF0E7C86))
+                } else {
+                    listOf(Color(0xFF475569), Color(0xFF334155))
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        vectorResource(Res.drawable.wifi_24px),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("开启 App 自动认证校园网", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = if (viewModel.isWifiConnected) {
-                                "已连接 Wi-Fi · 启动时自动使用首条账号认证"
-                            } else {
-                                "未检测到 Wi-Fi 连接 · 需先连接 CUMT 无线网"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(checked = autoLogin, onCheckedChange = viewModel::setAutoLogin)
-                }
-            }
-
-            // 登录表单卡片
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("选择校区与运营商", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CampusNetCampus.entries.forEach { campus ->
-                            FilterChip(
-                                selected = selectedCampus == campus,
-                                onClick = { selectedCampus = campus },
-                                label = { Text(campus.displayName) }
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = CircleShape,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    vectorResource(Res.drawable.wifi_24px),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (wifiConnected) "已连接无线网络" else "未检测到 Wi-Fi 连接",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = if (wifiConnected) {
+                                    "请确认处于 CUMT 校园网下进行认证"
+                                } else {
+                                    "请先连接 CUMT / CUMT_5G 等校园无线网"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.82f)
                             )
                         }
                     }
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Spacer(Modifier.height(14.dp))
+                    Surface(
+                        color = Color.White.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "启动时自动认证校园网",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "检测到 Wi-Fi 后自动使用首条账号续签",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.78f)
+                                )
+                            }
+                            Switch(
+                                checked = autoLogin,
+                                onCheckedChange = viewModel::setAutoLogin,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFF6B3CC9),
+                                    checkedTrackColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 登录表单卡片
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "校区与运营商配置",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    CumtSegmentedBar(
+                        options = CampusNetCampus.entries.map { it.displayName },
+                        selectedIndex = CampusNetCampus.entries.indexOf(selectedCampus).coerceAtLeast(0),
+                        onSelect = { selectedCampus = CampusNetCampus.entries[it] },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         CampusNetIsp.entries.forEach { isp ->
-                            FilterChip(
-                                selected = selectedIsp == isp,
+                            val selected = selectedIsp == isp
+                            Surface(
                                 onClick = { selectedIsp = isp },
-                                label = { Text(isp.displayName) }
-                            )
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) {
+                                    CumtAccent.VIOLET.containerColor()
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                                border = if (selected) {
+                                    BorderStroke(1.5.dp, CumtAccent.VIOLET.contentColor())
+                                } else null,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = isp.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) {
+                                        CumtAccent.VIOLET.contentColor()
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -297,6 +372,7 @@ fun CumtCampusNetScreen(
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("校园网账号（学号 / 宽带账号）") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         modifier = Modifier.fillMaxWidth()
@@ -306,6 +382,7 @@ fun CumtCampusNetScreen(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("校园网密码") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         visualTransformation = if (pwdVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
@@ -317,10 +394,11 @@ fun CumtCampusNetScreen(
                     )
 
                     if (!statusMessage.isNullOrBlank()) {
-                        Text(
+                        CumtStatusPill(
                             text = statusMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+                            containerColor = CumtAccent.TEAL.containerColor(),
+                            contentColor = CumtAccent.TEAL.contentColor(),
+                            dotColor = CumtAccent.TEAL.contentColor()
                         )
                     }
 
@@ -331,7 +409,10 @@ fun CumtCampusNetScreen(
                         Button(
                             onClick = { viewModel.login(username, password, selectedCampus, selectedIsp) },
                             enabled = !isBusy && username.isNotBlank() && password.isNotBlank(),
-                            modifier = Modifier.weight(1f)
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
                         ) {
                             if (isBusy) {
                                 CircularProgressIndicator(
@@ -341,20 +422,23 @@ fun CumtCampusNetScreen(
                                 )
                                 Spacer(Modifier.width(6.dp))
                             }
-                            Text("连接认证")
+                            Text("连接认证", fontWeight = FontWeight.SemiBold)
                         }
                         OutlinedButton(
                             onClick = { viewModel.logout(selectedCampus) },
-                            enabled = !isBusy
+                            enabled = !isBusy,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.height(46.dp)
                         ) {
                             Text("注销")
                         }
                     }
 
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = {
                             onNavigate(Destination.WebView(CumtConstants.CAMPUS_NET_SELF_SERVICE_URL, null))
                         },
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("校园网自助服务（管理在线终端）")
@@ -364,40 +448,60 @@ fun CumtCampusNetScreen(
 
             // 历史账号快捷切换
             if (accounts.isNotEmpty()) {
-                Text(
-                    text = "已保存的快捷账号（点击直接认证）",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                CumtSectionHeader(
+                    title = "已保存的快捷账号",
+                    subtitle = "点击卡片即可自动填入并直接认证"
                 )
                 accounts.forEach { acc ->
                     val c = CampusNetCampus.fromCode(acc.campusCode)
                     val isp = CampusNetIsp.fromId(acc.ispId)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                username = acc.username
-                                password = viewModel.decryptPassword(acc)
-                                selectedCampus = c
-                                selectedIsp = isp
-                                viewModel.quickLoginSaved(acc)
-                            },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    CumtSurfaceCard(
+                        onClick = {
+                            username = acc.username
+                            password = viewModel.decryptPassword(acc)
+                            selectedCampus = c
+                            selectedIsp = isp
+                            viewModel.quickLoginSaved(acc)
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            CumtIconBadge(
+                                icon = Res.drawable.wifi_24px,
+                                accent = CumtAccent.VIOLET,
+                                size = 40.dp,
+                                iconSize = 20.dp
+                            )
+                            Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(acc.username, fontWeight = FontWeight.Bold)
                                 Text(
-                                    text = "${c.displayName} · ${isp.displayName}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = acc.username,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
                                 )
+                                Spacer(Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    CumtStatusPill(
+                                        text = c.displayName,
+                                        containerColor = CumtAccent.TEAL.containerColor(),
+                                        contentColor = CumtAccent.TEAL.contentColor()
+                                    )
+                                    CumtStatusPill(
+                                        text = isp.displayName,
+                                        containerColor = CumtAccent.VIOLET.containerColor(),
+                                        contentColor = CumtAccent.VIOLET.contentColor()
+                                    )
+                                }
                             }
                             IconButton(onClick = { viewModel.deleteSavedAccount(acc.id) }) {
-                                Icon(vectorResource(Res.drawable.delete_24px), contentDescription = "删除账号")
+                                Icon(
+                                    vectorResource(Res.drawable.delete_24px),
+                                    contentDescription = "删除账号",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }

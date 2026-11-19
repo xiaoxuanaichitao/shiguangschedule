@@ -2,6 +2,7 @@ package com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtExamScheduleSynchronizer
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
@@ -25,6 +26,7 @@ class WebViewModel(
     private val courseConversionRepository: CourseConversionRepository,
     private val cumtLocalRepository: CumtLocalRepository,
     private val widgetDataSynchronizer: WidgetDataSynchronizer,
+    private val examScheduleSynchronizer: CumtExamScheduleSynchronizer,
     @Named("FilesDir") val filesDir: Path,
     val fileSystem: FileSystem
 ) : ViewModel() {
@@ -73,6 +75,7 @@ class WebViewModel(
                 appSettingsRepository.insertOrUpdateAppSettings(
                     settings.copy(currentCourseTableId = tableId)
                 )
+                runCatching { examScheduleSynchronizer.syncEnabledExamsToTable(tableId) }
                 widgetDataSynchronizer.syncNow()
                 courses.size to suggestedDate
             }
@@ -88,6 +91,7 @@ class WebViewModel(
                 appSettingsRepository.insertOrUpdateCourseConfig(
                     existing.copy(semesterStartDate = startDate)
                 )
+                runCatching { examScheduleSynchronizer.syncEnabledExamsToTable(tableId) }
                 widgetDataSynchronizer.syncNow()
                 Unit
             }

@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -215,8 +216,12 @@ fun AdaptiveNavigationScaffold(
                             Surface(
                                 shape = CircleShape,
                                 color = if (isTransparent) Color.Transparent else NavigationBarDefaults.containerColor,
-                                shadowElevation = 0.dp,
-                                tonalElevation = 3.dp
+                                shadowElevation = if (isTransparent) 0.dp else 6.dp,
+                                tonalElevation = 3.dp,
+                                border = if (isTransparent) null else BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                )
                             ) {
                                 FixedWidthNavBarContainer(
                                     navItems = navItems,

@@ -123,8 +123,12 @@ class CumtLocalRepository(
 
     suspend fun addOrMergeExams(newItems: List<CumtExamItem>, keepCustom: Boolean = true) {
         val current = examsFlow.first()
+        val existingSyncedIds = current.filter { it.syncedToSchedule }.mapTo(HashSet()) { it.id }
+        val normalizedNew = newItems.map { item ->
+            if (item.id in existingSyncedIds) item.copy(syncedToSchedule = true) else item
+        }
         val custom = if (keepCustom) current.filter { it.isCustom } else emptyList()
-        val merged = (newItems + custom).distinctBy { it.id }
+        val merged = (normalizedNew + custom).distinctBy { it.id }
         saveExams(merged)
     }
 
@@ -132,6 +136,27 @@ class CumtLocalRepository(
         val current = examsFlow.first().toMutableList()
         current.removeAll { it.id == item.id }
         current.add(item)
+        saveExams(current)
+    }
+
+    suspend fun updateExamSyncFlag(examId: String, synced: Boolean) {
+        val current = examsFlow.first().map { item ->
+            if (item.id == examId) item.copy(syncedToSchedule = synced) else item
+        }
+        saveExams(current)
+    }
+
+    suspend fun updateAllExamsSyncFlags(syncedIds: Set<String>) {
+        val current = examsFlow.first().map { item ->
+            if (item.id in syncedIds) item.copy(syncedToSchedule = true) else item
+        }
+        saveExams(current)
+    }
+
+    suspend fun clearAllExamSyncFlags() {
+        val current = examsFlow.first().map { item ->
+            if (item.syncedToSchedule) item.copy(syncedToSchedule = false) else item
+        }
         saveExams(current)
     }
 

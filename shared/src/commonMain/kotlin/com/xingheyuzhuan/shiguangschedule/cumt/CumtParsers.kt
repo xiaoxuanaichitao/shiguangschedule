@@ -1,10 +1,19 @@
 package com.xingheyuzhuan.shiguangschedule.cumt
 
 import com.xingheyuzhuan.shiguangschedule.data.model.CourseImportExport.ImportCourseJsonModel
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.isoDayNumber
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.round
+
+data class MappedExamScheduleSlot(
+    val weekNumber: Int,
+    val dayOfWeek: Int,
+    val startTime: String,
+    val endTime: String
+)
 
 data class ParsedBkScheduleResult(
     val courses: List<ImportCourseJsonModel>,
@@ -436,7 +445,49 @@ object CumtParsers {
         return courses
     }
 
-    // ==================== 考试查询解析 ====================
+    // ==================== 考试查询解析 & 课表同步映射 ====================
+
+    const val EXAM_COURSE_ID_PREFIX = "cumt_exam_"
+
+    fun buildExamCourseId(tableId: String, examId: String): String {
+        return "${EXAM_COURSE_ID_PREFIX}${tableId}_${examId.hashCode().toUInt().toString(16)}"
+    }
+
+    fun parseExamTimeRange(raw: String): Pair<String, String>? {
+        val m = Regex("""(\d{1,2})\s*[:：]\s*(\d{2})\s*[-~—–至]\s*(\d{1,2})\s*[:：]\s*(\d{2})""")
+            .find(raw) ?: return null
+        val sh = m.groupValues[1].toIntOrNull() ?: return null
+        val sm = m.groupValues[2].toIntOrNull() ?: return null
+        val eh = m.groupValues[3].toIntOrNull() ?: return null
+        val em = m.groupValues[4].toIntOrNull() ?: return null
+        if (sh !in 0..23 || sm !in 0..59 || eh !in 0..23 || em !in 0..59) return null
+        if (sh * 60 + sm >= eh * 60 + em) return null
+        val start = "${sh.toString().padStart(2, '0')}:${sm.toString().padStart(2, '0')}"
+        val end = "${eh.toString().padStart(2, '0')}:${em.toString().padStart(2, '0')}"
+        return start to end
+    }
+
+    fun mapExamToScheduleSlot(
+        exam: CumtExamItem,
+        semesterStartDate: String?,
+        firstDayOfWeek: Int,
+        weekIndexCalc: (LocalDate, String?, Int) -> Int?
+    ): MappedExamScheduleSlot? {
+        val date = runCatching { LocalDate(exam.year, exam.month, exam.day) }.getOrNull() ?: return null
+        val (start, end) = if (!exam.startTime.isNullOrBlank() && !exam.endTime.isNullOrBlank()) {
+            exam.startTime to exam.endTime
+        } else {
+            parseExamTimeRange(exam.dateTimeRaw) ?: return null
+        }
+        val week = weekIndexCalc(date, semesterStartDate, firstDayOfWeek) ?: return null
+        if (week !in 1..30) return null
+        return MappedExamScheduleSlot(
+            weekNumber = week,
+            dayOfWeek = date.dayOfWeek.isoDayNumber,
+            startTime = start,
+            endTime = end
+        )
+    }
 
     fun parseExamHtml(html: String): List<CumtExamItem> {
         val tbody = Regex("""<tbody\b[^>]*>([\s\S]*?)</tbody>""", RegexOption.IGNORE_CASE)
@@ -456,12 +507,14 @@ object CumtParsers {
             val courseName = map["tabGrid_kcmc"].orEmpty().trim()
             val location = map["tabGrid_cdmc"].orEmpty().trim()
             val timeRaw = map["tabGrid_kssj"].orEmpty().trim()
+            val seatNumber = map["tabGrid_zwh"].orEmpty().trim()
             if (courseName.isBlank() || timeRaw.isBlank()) continue
 
             val dateMatch = Regex("""(\d{4})-(\d{1,2})-(\d{1,2})""").find(timeRaw) ?: continue
             val year = dateMatch.groupValues[1].toIntOrNull() ?: continue
             val month = dateMatch.groupValues[2].toIntOrNull() ?: continue
             val day = dateMatch.groupValues[3].toIntOrNull() ?: continue
+            val timeRange = parseExamTimeRange(timeRaw)
 
             val id = "$courseName|$timeRaw|$location"
             if (dedup.add(id)) {
@@ -474,7 +527,10 @@ object CumtParsers {
                         year = year,
                         month = month,
                         day = day,
-                        isCustom = false
+                        isCustom = false,
+                        seatNumber = seatNumber,
+                        startTime = timeRange?.first,
+                        endTime = timeRange?.second
                     )
                 )
             }

@@ -2,6 +2,8 @@ package com.xingheyuzhuan.shiguangschedule.ui.today
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtExamItem
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.data.db.main.Course
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfig
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseWithWeeks
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.toLocalDateTime
 import org.koin.core.annotation.KoinViewModel
@@ -32,7 +35,8 @@ class TodayScheduleViewModel(
     private val appSettingsRepository: AppSettingsRepository,
     private val courseTableRepository: CourseTableRepository,
     private val styleSettingsRepository: StyleSettingsRepository,
-    private val timeScheduleRepository: TimeScheduleRepository
+    private val timeScheduleRepository: TimeScheduleRepository,
+    private val cumtLocalRepository: CumtLocalRepository
 ) : ViewModel() {
 
     companion object {
@@ -42,6 +46,18 @@ class TodayScheduleViewModel(
 
     val gridStyle: StateFlow<ScheduleGridStyle> = styleSettingsRepository.styleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScheduleGridStyle())
+
+    val upcomingExamHint: StateFlow<CumtExamItem?> = cumtLocalRepository.examsFlow
+        .map { exams ->
+            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            exams.mapNotNull { exam ->
+                val date = runCatching { LocalDate(exam.year, exam.month, exam.day) }.getOrNull()
+                    ?: return@mapNotNull null
+                val daysLeft = today.daysUntil(date)
+                if (daysLeft in 0..7) exam to daysLeft else null
+            }.minByOrNull { it.second }?.first
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<TodayUiState> = appSettingsRepository.getAppSettings()

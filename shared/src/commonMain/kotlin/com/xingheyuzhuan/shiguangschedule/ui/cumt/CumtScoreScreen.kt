@@ -1,6 +1,5 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,19 +10,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +32,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,13 +66,16 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.add_24px
-import shiguangschedule.shared.generated.resources.arrow_back_24px
+import shiguangschedule.shared.generated.resources.award_star_24px
+import shiguangschedule.shared.generated.resources.close_24px
 import shiguangschedule.shared.generated.resources.delete_24px
 import shiguangschedule.shared.generated.resources.download_24px
 import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.refresh_24px
+import shiguangschedule.shared.generated.resources.school_24px
 import shiguangschedule.shared.generated.resources.search_24px
 import shiguangschedule.shared.generated.resources.tune_24px
+import kotlin.math.abs
 import kotlin.math.round
 
 @KoinViewModel
@@ -156,7 +159,6 @@ private fun formatTwoDecimals(value: Double): String {
     return "$whole.$frac"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CumtScoreScreen(
     onNavigate: (Destination) -> Unit,
@@ -202,16 +204,18 @@ fun CumtScoreScreen(
     }
 
     val allIncluded = scores.isNotEmpty() && scores.all { it.isIncluded }
+    val selectedRateSegment = when {
+        abs(rate - 1.0) < 0.001 -> 0
+        abs(rate - 1.2) < 0.001 -> 1
+        else -> 2
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("成绩查询与绩点") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.arrow_back_24px), contentDescription = "返回")
-                    }
-                },
+            CumtTopBar(
+                title = "成绩与绩点",
+                subtitle = if (scores.isEmpty()) "支持 GPA 倍率与等级分定制" else "共 ${scores.size} 门课程 · 已选 ${summary.includedCount} 门",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = { showHelpDialog = true }) {
                         Icon(vectorResource(Res.drawable.info_24px), contentDescription = "说明")
@@ -233,97 +237,122 @@ fun CumtScoreScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 顶部汇总卡片
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
+            // 顶部 GPA 仪表盘卡片
+            CumtHeroGradientCard(
+                gradientColors = listOf(Color(0xFF2843A8), Color(0xFF0E7C86)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         Column {
                             Text(
                                 text = "加权平均绩点 (GPA)",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                color = Color.White.copy(alpha = 0.82f)
                             )
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 text = formatTwoDecimals(summary.weightedGpa),
-                                style = MaterialTheme.typography.headlineLarge,
+                                style = MaterialTheme.typography.displaySmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = Color.White
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "加权平均成绩",
+                                text = "加权平均分",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                color = Color.White.copy(alpha = 0.82f)
                             )
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 text = formatTwoDecimals(summary.weightedScore),
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = Color.White
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(14.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "已纳入 ${summary.includedCount} 门 · 共 ${formatTwoDecimals(summary.totalCredits)} 学分 · 倍率 ${formatTwoDecimals(rate)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Text(
+                                    text = "${summary.includedCount} 门 · ${formatTwoDecimals(summary.totalCredits)} 学分",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                            Surface(
+                                color = Color.White.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(50),
+                                onClick = { showRateDialog = true }
+                            ) {
+                                Text(
+                                    text = "${formatTwoDecimals(rate)}x 倍率",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                        Surface(
+                            color = Color.White.copy(alpha = 0.22f),
+                            shape = RoundedCornerShape(50),
+                            onClick = {
+                                onNavigate(Destination.WebView(CumtConstants.JWXT_SCORE_DETAIL_URL, null))
+                            }
+                        ) {
+                            Text(
+                                text = "分项明细 ›",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // 筛选与快捷操作栏
-            Row(
+            // 倍率切换分段栏
+            CumtSegmentedBar(
+                options = listOf(
+                    "1.0x 标准",
+                    "1.2x 推免",
+                    if (selectedRateSegment == 2) "自定义(${formatTwoDecimals(rate)}x)" else "自定义"
+                ),
+                selectedIndex = selectedRateSegment,
+                onSelect = { idx ->
+                    when (idx) {
+                        0 -> viewModel.setRate(1.0)
+                        1 -> viewModel.setRate(1.2)
+                        else -> showRateDialog = true
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = rate == 1.0,
-                    onClick = { viewModel.setRate(1.0) },
-                    label = { Text("1.0x") }
-                )
-                FilterChip(
-                    selected = kotlin.math.abs(rate - 1.2) < 0.001,
-                    onClick = { viewModel.setRate(1.2) },
-                    label = { Text("1.2x") }
-                )
-                FilterChip(
-                    selected = rate != 1.0 && kotlin.math.abs(rate - 1.2) >= 0.001,
-                    onClick = { showRateDialog = true },
-                    label = { Text("自定义倍率") }
-                )
-                Spacer(Modifier.weight(1f))
-                TextButton(
-                    onClick = {
-                        onNavigate(Destination.WebView(CumtConstants.JWXT_SCORE_DETAIL_URL, null))
-                    }
-                ) {
-                    Text("分项明细")
-                }
-            }
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            )
 
+            // 搜索与排序筛选栏
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -338,13 +367,24 @@ fun CumtScoreScreen(
                     leadingIcon = {
                         Icon(vectorResource(Res.drawable.search_24px), contentDescription = null)
                     },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(vectorResource(Res.drawable.close_24px), contentDescription = "清空")
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
 
                 Box {
-                    OutlinedButton(onClick = { showSortMenu = true }) {
-                        Text("排序")
+                    OutlinedButton(
+                        onClick = { showSortMenu = true },
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(if (sortOption == ScoreSortOption.DEFAULT) "排序" else sortOption.displayName)
                     }
                     DropdownMenu(
                         expanded = showSortMenu,
@@ -363,37 +403,40 @@ fun CumtScoreScreen(
                 }
 
                 if (scores.isNotEmpty()) {
-                    TextButton(onClick = { viewModel.selectAll(!allIncluded) }) {
+                    FilledTonalButton(
+                        onClick = { viewModel.selectAll(!allIncluded) },
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
                         Text(if (allIncluded) "全不选" else "全选")
                     }
                 }
             }
 
             if (displayedScores.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = if (scores.isEmpty()) "暂未导入课程成绩" else "没有匹配的成绩记录",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                onNavigate(Destination.CumtJwxtExtract(CumtExtractMode.SCORE))
-                            }
-                        ) {
-                            Text("前往正方教务抓取成绩")
+                CumtEmptyState(
+                    icon = Res.drawable.award_star_24px,
+                    accent = CumtAccent.INDIGO,
+                    title = if (scores.isEmpty()) "暂未导入课程成绩" else "没有匹配的成绩记录",
+                    subtitle = if (scores.isEmpty()) {
+                        "登录正方教务系统后即可一键导入全部课程成绩与学分绩点"
+                    } else {
+                        "尝试更换搜索关键词，或清空当前筛选条件"
+                    },
+                    primaryActionText = if (scores.isEmpty()) "前往正方教务抓取成绩" else "清空搜索条件",
+                    onPrimaryAction = {
+                        if (scores.isEmpty()) {
+                            onNavigate(Destination.CumtJwxtExtract(CumtExtractMode.SCORE))
+                        } else {
+                            searchQuery = ""
                         }
-                    }
-                }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(displayedScores, key = { it.id }) { item ->
                         ScoreRowCard(
@@ -418,6 +461,7 @@ fun CumtScoreScreen(
                     onValueChange = { rateInput = it },
                     label = { Text("倍率（如 1.0、1.2）") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -450,7 +494,7 @@ fun CumtScoreScreen(
                     "• 加权平均绩点 = Σ(课程学分 × 课程绩点 × 倍率) ÷ Σ(已勾选课程学分)\n" +
                         "• 加权平均成绩 = Σ(课程学分 × 百分制成绩 × 倍率) ÷ Σ(已勾选课程学分)\n" +
                         "• 非数字成绩（如「优秀」「良好」「合格」）将自动依据右上角「等级分设置」的规则换算，若包含未配置的文字等级请前往设置页面补充。\n" +
-                        "• 可点击单门课程右侧复选框自由排除公选课或特定科目以估算推免/保研绩点。"
+                        "• 可点击单门课程自由勾选或排除公选课与特定科目，实时估算推免/保研绩点。"
                 )
             },
             confirmButton = {
@@ -468,21 +512,28 @@ private fun ScoreRowCard(
 ) {
     val resolved = CumtParsers.resolveEffectiveScoreAndGpa(item, mappings)
     val isUnmapped = resolved == null
+    val scoreAccent = when {
+        resolved == null -> CumtAccent.SLATE
+        resolved.first >= 90.0 -> CumtAccent.EMERALD
+        resolved.first >= 80.0 -> CumtAccent.INDIGO
+        resolved.first >= 70.0 -> CumtAccent.SKY
+        resolved.first >= 60.0 -> CumtAccent.AMBER
+        else -> CumtAccent.CORAL
+    }
 
-    Card(
+    CumtSurfaceCard(
+        onClick = onToggle,
+        containerColor = if (item.isIncluded) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLowest
+        },
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle),
-        colors = CardDefaults.cardColors(
-            containerColor = if (item.isIncluded) {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            }
-        )
+            .alpha(if (item.isIncluded) 1f else 0.62f)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
@@ -498,32 +549,31 @@ private fun ScoreRowCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CumtStatusPill(
                         text = "学分 ${item.credit}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
+                    CumtStatusPill(
                         text = "绩点 ${item.gpa ?: resolved?.second?.let(::formatTwoDecimals) ?: "--"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        containerColor = CumtAccent.TEAL.containerColor(),
+                        contentColor = CumtAccent.TEAL.contentColor()
                     )
                     if (item.examType != "正常考试" && item.examType.isNotBlank()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = MaterialTheme.shapes.extraSmall
-                        ) {
-                            Text(
-                                text = item.examType,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
+                        CumtStatusPill(
+                            text = item.examType,
+                            containerColor = CumtAccent.AMBER.containerColor(),
+                            contentColor = CumtAccent.AMBER.contentColor()
+                        )
                     }
                 }
                 if (isUnmapped) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = "未映射等级「${item.scoreRaw}」，请在等级分设置中添加",
                         style = MaterialTheme.typography.labelSmall,
@@ -531,22 +581,27 @@ private fun ScoreRowCard(
                     )
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = item.scoreRaw,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (resolved != null && resolved.first < 60.0) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.primary
+            Spacer(Modifier.width(10.dp))
+            Surface(
+                color = scoreAccent.containerColor(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = item.scoreRaw,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = scoreAccent.contentColor()
+                    )
                 }
-            )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CumtScoreMappingScreen(
     onBack: () -> Unit,
@@ -558,13 +613,10 @@ fun CumtScoreMappingScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("等级分换算设置") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.arrow_back_24px), contentDescription = "返回")
-                    }
-                },
+            CumtTopBar(
+                title = "等级分换算设置",
+                subtitle = "点击规则条目可直接编辑",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = viewModel::resetMappings) {
                         Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = "恢复默认")
@@ -581,36 +633,67 @@ fun CumtScoreMappingScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                Text(
-                    text = "点击任意条目可修改折算分数与绩点，或点击右上角新增/恢复矿大默认换算表。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-            items(mappings, key = { it.rawName }) { entry ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { editingEntry = entry }
+                CumtSurfaceCard(
+                    containerColor = CumtAccent.INDIGO.containerColor().copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CumtIconBadge(
+                            icon = Res.drawable.tune_24px,
+                            accent = CumtAccent.INDIGO,
+                            size = 40.dp,
+                            iconSize = 20.dp
+                        )
+                        Text(
+                            text = "文字成绩将依据此表折算为百分制与绩点。可点击条目调整或右上角恢复矿大默认表。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+            items(mappings, key = { it.rawName }) { entry ->
+                CumtSurfaceCard(
+                    onClick = { editingEntry = entry },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(entry.rawName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                text = "对应分数 ${entry.numericScore} · 绩点 ${entry.gpa}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = entry.rawName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CumtStatusPill(
+                                    text = "百分制 ${entry.numericScore}",
+                                    containerColor = CumtAccent.SKY.containerColor(),
+                                    contentColor = CumtAccent.SKY.contentColor()
+                                )
+                                CumtStatusPill(
+                                    text = "绩点 ${entry.gpa}",
+                                    containerColor = CumtAccent.TEAL.containerColor(),
+                                    contentColor = CumtAccent.TEAL.contentColor()
+                                )
+                            }
                         }
                         IconButton(onClick = { viewModel.deleteMapping(entry.rawName) }) {
-                            Icon(vectorResource(Res.drawable.delete_24px), contentDescription = "删除")
+                            Icon(
+                                vectorResource(Res.drawable.delete_24px),
+                                contentDescription = "删除",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -631,11 +714,12 @@ fun CumtScoreMappingScreen(
             },
             title = { Text(if (editingEntry != null) "编辑换算规则" else "新增换算规则") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = nameText,
                         onValueChange = { nameText = it },
                         label = { Text("等级名称（如 优秀）") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -643,6 +727,7 @@ fun CumtScoreMappingScreen(
                         value = scoreText,
                         onValueChange = { scoreText = it },
                         label = { Text("对应百分制成绩") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
@@ -651,6 +736,7 @@ fun CumtScoreMappingScreen(
                         value = gpaText,
                         onValueChange = { gpaText = it },
                         label = { Text("对应绩点") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()

@@ -63,7 +63,7 @@ import shiguangschedule.shared.generated.resources.theme_settings_title
 import shiguangschedule.shared.generated.resources.title_more_options
 import shiguangschedule.shared.generated.resources.update_24px
 
-private const val GITHUB_REPO_URL = "https://github.com/XingHeYuZhuan/shiguangschedule"
+private const val GITHUB_REPO_URL = "https://github.com/xiaoxuanaichitao/shiguangschedule"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,17 +86,13 @@ fun MoreOptionsScreen(
 
     // 更新逻辑相关状态
     var updateStatus by remember { mutableStateOf<UpdateStatus>(UpdateStatus.Idle) }
-    var selectedPlatform by remember { mutableStateOf(UpdatePlatform.GITEE) }
 
     // 弹窗可见性控制
     var showUpdateDialog by remember { mutableStateOf(false) }
-    var showChannelDialog by remember { mutableStateOf(false) }
     var showStartScreenDialog by remember { mutableStateOf(false) }
 
     // 逻辑：执行更新检查
     val startUpdateCheck: (UpdatePlatform) -> Unit = { platform ->
-        selectedPlatform = platform
-        showChannelDialog = false
         updateStatus = UpdateStatus.Checking
         showUpdateDialog = true
         coroutineScope.launch {
@@ -175,7 +171,7 @@ fun MoreOptionsScreen(
                     SettingListItem(
                         icon = vectorResource(Res.drawable.update_24px),
                         title = stringResource(Res.string.item_check_software_update),
-                        onClick = { showChannelDialog = true }
+                        onClick = { startUpdateCheck(UpdatePlatform.GITHUB) }
                     )
 
                     // 语言切换 (导航至独立页面)
@@ -267,13 +263,5 @@ fun MoreOptionsScreen(
         onDownloadClick = { targetUrl ->
             updateChecker.launchUpdate(targetUrl)
         }
-    )
-
-    // 更新渠道选择弹窗
-    ChannelSelectionDialog(
-        showDialog = showChannelDialog,
-        currentSelected = selectedPlatform,
-        onDismiss = { showChannelDialog = false },
-        onConfirm = startUpdateCheck
     )
 }

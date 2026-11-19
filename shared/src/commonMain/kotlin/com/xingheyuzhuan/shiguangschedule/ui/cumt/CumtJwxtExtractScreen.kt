@@ -3,6 +3,7 @@ package com.xingheyuzhuan.shiguangschedule.ui.cumt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,8 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -38,13 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xingheyuzhuan.shiguangschedule.CumtExtractMode
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtExamItem
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtExamScheduleSynchronizer
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtScoreItem
@@ -73,7 +76,8 @@ import shiguangschedule.shared.generated.resources.refresh_24px
 @KoinViewModel
 class CumtJwxtExtractViewModel(
     private val localRepo: CumtLocalRepository,
-    val courseConversionRepository: CourseConversionRepository
+    val courseConversionRepository: CourseConversionRepository,
+    private val examScheduleSynchronizer: CumtExamScheduleSynchronizer
 ) : ViewModel() {
 
     suspend fun getAutoFillJs(url: String): String? {
@@ -81,10 +85,22 @@ class CumtJwxtExtractViewModel(
         return CumtWebScripts.autoFillAndNavigateJs(url, creds.first, creds.second)
     }
 
-    fun saveImportedExams(items: List<CumtExamItem>, onDone: () -> Unit) {
+    fun saveImportedExams(items: List<CumtExamItem>, onPromptSync: () -> Unit) {
         viewModelScope.launch {
             localRepo.addOrMergeExams(items, keepCustom = true)
-            ToastManager.show("已导入 ${items.size} 条考试安排")
+            ToastManager.show("已保存 ${items.size} 条考试安排")
+            onPromptSync()
+        }
+    }
+
+    fun syncUpcomingExamsAfterImport(onDone: () -> Unit) {
+        viewModelScope.launch {
+            val report = examScheduleSynchronizer.syncAllUpcomingToCurrentTable()
+            if (report.errorMessage != null) {
+                ToastManager.show(report.errorMessage)
+            } else {
+                ToastManager.show("已将 ${report.syncedCount} 场待考同步进当前课表")
+            }
             onDone()
         }
     }
@@ -133,6 +149,7 @@ fun CumtJwxtExtractScreen(
     val stagedExams = remember { mutableStateListOf<CumtExamItem>() }
     val stagedScores = remember { mutableStateListOf<CumtScoreItem>() }
     var showStagedSheet by remember { mutableStateOf(false) }
+    var showSyncConfirmDialog by remember { mutableStateOf(false) }
 
     val stagedCount = if (mode == CumtExtractMode.EXAM) stagedExams.size else stagedScores.size
 
@@ -146,24 +163,11 @@ fun CumtJwxtExtractScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(pageTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            text = "登录并点击「查询」加载表格后，点底部「抓取本页」（可翻页累加）",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.close_24px), contentDescription = "关闭")
-                    }
-                },
+            CumtTopBar(
+                title = pageTitle,
+                subtitle = "点击「查询」加载后点下方「抓取本页」，多页可翻页累加",
+                onBack = onBack,
+                navIcon = vectorResource(Res.drawable.close_24px),
                 actions = {
                     IconButton(onClick = { controller.reload() }) {
                         Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = "刷新")
@@ -172,7 +176,10 @@ fun CumtJwxtExtractScreen(
             )
         },
         bottomBar = {
-            BottomAppBar(modifier = Modifier.navigationBarsPadding()) {
+            BottomAppBar(
+                modifier = Modifier.navigationBarsPadding(),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -188,12 +195,16 @@ fun CumtJwxtExtractScreen(
 
                     OutlinedButton(
                         onClick = { showStagedSheet = true },
+                        shape = RoundedCornerShape(50),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("已暂存 ($stagedCount)")
                     }
 
                     OutlinedButton(
+                        shape = RoundedCornerShape(50),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                         onClick = {
                             controller.evaluateJavascript(CumtWebScripts.extractJwxtGridHtmlJs()) { raw ->
                                 val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
@@ -228,9 +239,13 @@ fun CumtJwxtExtractScreen(
 
                     Button(
                         enabled = stagedCount > 0,
+                        shape = RoundedCornerShape(50),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         onClick = {
                             if (mode == CumtExtractMode.EXAM) {
-                                viewModel.saveImportedExams(stagedExams.toList(), onBack)
+                                viewModel.saveImportedExams(stagedExams.toList()) {
+                                    showSyncConfirmDialog = true
+                                }
                             } else {
                                 viewModel.saveImportedScores(stagedScores.toList(), onBack)
                             }
@@ -242,46 +257,63 @@ fun CumtJwxtExtractScreen(
             }
         }
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            PlatformWebView(
-                modifier = Modifier.fillMaxSize(),
-                url = initialUrl,
-                isDesktopMode = true,
-                isDevToolsEnabled = false,
-                controller = controller,
-                bridgeHandler = bridgeHandler,
-                onProgressChange = { progress = it },
-                onTitleChange = { if (it.isNotBlank()) pageTitle = it },
-                onNavigateToSchedule = {},
-                onPageLoaded = { loadedUrl ->
-                    coroutineScope.launch {
-                        viewModel.getAutoFillJs(loadedUrl)?.let { controller.executeScript(it) }
-                    }
-                },
-                onSslError = { failingUrl, onProceed, onCancel ->
-                    uiEventChannel.trySend(
-                        WebUiEvent.ShowSslWarning(
-                            SslErrorData(
-                                primaryErrorUrl = failingUrl,
-                                onProceed = onProceed,
-                                onCancel = onCancel
-                            )
-                        )
-                    )
-                }
-            )
-            if (progress < 1.0f) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
-                    trackColor = Color.Transparent
+            Surface(
+                color = CumtAccent.OCEAN.containerColor().copy(alpha = 0.65f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (mode == CumtExtractMode.EXAM) {
+                        "提示：抓考表支持同时识别座位号与起止时间，导入后可一键同步到课表。"
+                    } else {
+                        "提示：建议选择目标学年或「全部」后点查询，若有多页请翻页逐页抓取。"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CumtAccent.OCEAN.contentColor(),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
-            WebDialogHost(uiEvents = uiEventsFlow)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                PlatformWebView(
+                    modifier = Modifier.fillMaxSize(),
+                    url = initialUrl,
+                    isDesktopMode = true,
+                    isDevToolsEnabled = false,
+                    controller = controller,
+                    bridgeHandler = bridgeHandler,
+                    onProgressChange = { progress = it },
+                    onTitleChange = { if (it.isNotBlank()) pageTitle = it },
+                    onNavigateToSchedule = {},
+                    onPageLoaded = { loadedUrl ->
+                        coroutineScope.launch {
+                            viewModel.getAutoFillJs(loadedUrl)?.let { controller.executeScript(it) }
+                        }
+                    },
+                    onSslError = { failingUrl, onProceed, onCancel ->
+                        uiEventChannel.trySend(
+                            WebUiEvent.ShowSslWarning(
+                                SslErrorData(
+                                    primaryErrorUrl = failingUrl,
+                                    onProceed = onProceed,
+                                    onCancel = onCancel
+                                )
+                            )
+                        )
+                    }
+                )
+                if (progress < 1.0f) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+                        trackColor = Color.Transparent
+                    )
+                }
+                WebDialogHost(uiEvents = uiEventsFlow)
+            }
         }
     }
 
@@ -303,10 +335,13 @@ fun CumtJwxtExtractScreen(
                         fontWeight = FontWeight.Bold
                     )
                     if (stagedCount > 0) {
-                        OutlinedButton(onClick = {
-                            stagedExams.clear()
-                            stagedScores.clear()
-                        }) { Text("清空") }
+                        OutlinedButton(
+                            onClick = {
+                                stagedExams.clear()
+                                stagedScores.clear()
+                            },
+                            shape = RoundedCornerShape(50)
+                        ) { Text("清空") }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -324,15 +359,19 @@ fun CumtJwxtExtractScreen(
                     ) {
                         if (mode == CumtExtractMode.EXAM) {
                             items(stagedExams, key = { it.id }) { exam ->
-                                Card(modifier = Modifier.fillMaxWidth()) {
+                                CumtSurfaceCard(
+                                    cornerRadius = 14.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
                                     Row(
                                         modifier = Modifier.padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(exam.courseName, fontWeight = FontWeight.SemiBold)
+                                            val seatStr = exam.seatNumber.takeIf { it.isNotBlank() }?.let { " · 座$it" }.orEmpty()
                                             Text(
-                                                "${exam.dateTimeRaw} ${exam.location}".trim(),
+                                                "${exam.dateTimeRaw} ${exam.location}$seatStr".trim(),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -345,7 +384,10 @@ fun CumtJwxtExtractScreen(
                             }
                         } else {
                             items(stagedScores, key = { it.id }) { score ->
-                                Card(modifier = Modifier.fillMaxWidth()) {
+                                CumtSurfaceCard(
+                                    cornerRadius = 14.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
                                     Row(
                                         modifier = Modifier.padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -370,5 +412,32 @@ fun CumtJwxtExtractScreen(
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
+
+    if (showSyncConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSyncConfirmDialog = false
+                onBack()
+            },
+            title = { Text("考试已保存，是否插入课表？") },
+            text = { Text("立即将本次待考安排写入当前课表，即可在周课表、今日课表、桌面小组件查看，并享受考前提醒与自动免打扰。") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSyncConfirmDialog = false
+                        viewModel.syncUpcomingExamsAfterImport(onBack)
+                    }
+                ) { Text("立即同步到课表") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSyncConfirmDialog = false
+                        onBack()
+                    }
+                ) { Text("稍后手动同步") }
+            }
+        )
     }
 }

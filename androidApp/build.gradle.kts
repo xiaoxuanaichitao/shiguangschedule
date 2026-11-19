@@ -16,7 +16,7 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.xingheyuzhuan.shiguangschedule"
+        applicationId = "com.cumt.shiguangschedule"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 36
@@ -98,7 +98,7 @@ androidComponents {
             }?.identifier ?: "universal"
 
             // 动态设置输出的 APK 文件名
-            output.outputFileName.set("shiguangschedule-v${versionName}-${abiFilter}-${buildType}.apk")
+            output.outputFileName.set("cumt-shiguang-v${versionName}-${abiFilter}-${buildType}.apk")
         }
     }
 }

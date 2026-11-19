@@ -1,7 +1,13 @@
 package com.xingheyuzhuan.shiguangschedule.cumt
 
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.minus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -140,6 +146,7 @@ class CumtUnitTests {
                   <td aria-describedby="tabGrid_kcmc">数据结构</td>
                   <td aria-describedby="tabGrid_cdmc">博五B102</td>
                   <td aria-describedby="tabGrid_kssj">2026-06-20(09:00-11:00)</td>
+                  <td aria-describedby="tabGrid_zwh">24</td>
                 </tr>
               </tbody>
             </table>
@@ -148,6 +155,9 @@ class CumtUnitTests {
         assertEquals(1, exams.size)
         assertEquals("数据结构", exams[0].courseName)
         assertEquals("博五B102", exams[0].location)
+        assertEquals("24", exams[0].seatNumber)
+        assertEquals("09:00", exams[0].startTime)
+        assertEquals("11:00", exams[0].endTime)
         assertEquals(2026, exams[0].year)
         assertEquals(6, exams[0].month)
         assertEquals(20, exams[0].day)
@@ -211,5 +221,120 @@ class CumtUnitTests {
         assertTrue(CumtBusData.nNorthWork.isNotEmpty())
         assertEquals(15, CumtBusData.getSoonMinutes("14:30", 14, 15))
         assertNull(CumtBusData.getSoonMinutes("16:00", 14, 15))
+    }
+
+    private fun calcWeekIndexForTest(
+        targetDate: LocalDate,
+        startDateStr: String?,
+        firstDayOfWeekInt: Int
+    ): Int? {
+        if (startDateStr.isNullOrEmpty()) return null
+        val parsedStart = LocalDate.parse(startDateStr)
+        val startOffset = (parsedStart.dayOfWeek.isoDayNumber - firstDayOfWeekInt + 7) % 7
+        val targetOffset = (targetDate.dayOfWeek.isoDayNumber - firstDayOfWeekInt + 7) % 7
+        val alignedStart = parsedStart.minus(startOffset, DateTimeUnit.DAY)
+        val alignedTarget = targetDate.minus(targetOffset, DateTimeUnit.DAY)
+        val diffDays = alignedTarget.toEpochDays() - alignedStart.toEpochDays()
+        return (diffDays / 7).toInt() + 1
+    }
+
+    @Test
+    fun parseExamTimeRangeAndBuildExamCourseId() {
+        assertEquals("09:00" to "11:00", CumtParsers.parseExamTimeRange("2026-06-20(09:00-11:00)"))
+        assertEquals("08:30" to "10:30", CumtParsers.parseExamTimeRange("2026-06-20 8：30至10：30"))
+        assertNull(CumtParsers.parseExamTimeRange("11:00-09:00"))
+        assertNull(CumtParsers.parseExamTimeRange("2026-06-20"))
+
+        val id1 = CumtParsers.buildExamCourseId("tableA", "exam1")
+        val id1Again = CumtParsers.buildExamCourseId("tableA", "exam1")
+        val idOtherTable = CumtParsers.buildExamCourseId("tableB", "exam1")
+        val idOtherExam = CumtParsers.buildExamCourseId("tableA", "exam2")
+
+        assertTrue(id1.startsWith(CumtParsers.EXAM_COURSE_ID_PREFIX))
+        assertEquals(id1, id1Again)
+        assertNotEquals(id1, idOtherTable)
+        assertNotEquals(id1, idOtherExam)
+    }
+
+    @Test
+    fun mapExamToScheduleSlotHandlesWeekdayWeekendExtendedWeeksAndInvalidCases() {
+        val semesterStart = "2026-03-02" // 星期一
+        val mondayFirstDay = DayOfWeek.MONDAY.isoDayNumber
+
+        val weekdayExam = CumtExamItem(
+            id = "e1",
+            courseName = "数据结构",
+            location = "博五B102",
+            dateTimeRaw = "2026-03-04(09:00-11:00)",
+            year = 2026,
+            month = 3,
+            day = 4,
+            startTime = "09:00",
+            endTime = "11:00"
+        )
+        val weekdaySlot = CumtParsers.mapExamToScheduleSlot(
+            exam = weekdayExam,
+            semesterStartDate = semesterStart,
+            firstDayOfWeek = mondayFirstDay,
+            weekIndexCalc = ::calcWeekIndexForTest
+        )
+        assertNotNull(weekdaySlot)
+        assertEquals(1, weekdaySlot.weekNumber)
+        assertEquals(3, weekdaySlot.dayOfWeek)
+        assertEquals("09:00", weekdaySlot.startTime)
+        assertEquals("11:00", weekdaySlot.endTime)
+
+        val weekendExam = weekdayExam.copy(
+            id = "e2",
+            dateTimeRaw = "2026-03-07 14:30-16:30",
+            day = 7,
+            startTime = null,
+            endTime = null
+        )
+        val weekendSlot = CumtParsers.mapExamToScheduleSlot(
+            exam = weekendExam,
+            semesterStartDate = semesterStart,
+            firstDayOfWeek = mondayFirstDay,
+            weekIndexCalc = ::calcWeekIndexForTest
+        )
+        assertNotNull(weekendSlot)
+        assertEquals(1, weekendSlot.weekNumber)
+        assertEquals(6, weekendSlot.dayOfWeek)
+        assertEquals("14:30", weekendSlot.startTime)
+        assertEquals("16:30", weekendSlot.endTime)
+
+        // 第 21 周 (> 20) 同样应被保留映射
+        val week21Exam = weekdayExam.copy(id = "e3", month = 7, day = 20, dateTimeRaw = "2026-07-20(09:00-11:00)")
+        val week21Slot = CumtParsers.mapExamToScheduleSlot(
+            exam = week21Exam,
+            semesterStartDate = semesterStart,
+            firstDayOfWeek = mondayFirstDay,
+            weekIndexCalc = ::calcWeekIndexForTest
+        )
+        assertNotNull(week21Slot)
+        assertEquals(21, week21Slot.weekNumber)
+        assertEquals(1, week21Slot.dayOfWeek)
+
+        // 开学前日期 (week <= 0) 应返回 null
+        val preSemesterExam = weekdayExam.copy(id = "e4", month = 2, day = 25, dateTimeRaw = "2026-02-25(09:00-11:00)")
+        assertNull(
+            CumtParsers.mapExamToScheduleSlot(
+                exam = preSemesterExam,
+                semesterStartDate = semesterStart,
+                firstDayOfWeek = mondayFirstDay,
+                weekIndexCalc = ::calcWeekIndexForTest
+            )
+        )
+
+        // 缺少起止时间应返回 null
+        val noTimeExam = weekdayExam.copy(id = "e5", dateTimeRaw = "2026-03-04", startTime = null, endTime = null)
+        assertNull(
+            CumtParsers.mapExamToScheduleSlot(
+                exam = noTimeExam,
+                semesterStartDate = semesterStart,
+                firstDayOfWeek = mondayFirstDay,
+                weekIndexCalc = ::calcWeekIndexForTest
+            )
+        )
     }
 }

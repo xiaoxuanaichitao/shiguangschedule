@@ -14,7 +14,6 @@ import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 
 enum class UpdatePlatform(val title: String) {
-    GITEE("Gitee 镜像 (推荐)"),
     GITHUB("GitHub 官方")
 }
 
@@ -61,8 +60,7 @@ class UpdateChecker(
     private val httpClient: HttpClient = defaultHttpClient
 ) {
     companion object {
-        private const val GITHUB_REPO = "XingHeYuZhuan/shiguangschedule"
-        private const val GITEE_REPO = "XingHeYuZhuan-gh/shiguangschedule"
+        private const val GITHUB_REPO = "xiaoxuanaichitao/shiguangschedule"
 
         val defaultHttpClient by lazy {
             HttpClient {
@@ -87,13 +85,12 @@ class UpdateChecker(
         try {
             val apiUrl = when (platform) {
                 UpdatePlatform.GITHUB -> "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
-                UpdatePlatform.GITEE -> "https://gitee.com/api/v5/repos/$GITEE_REPO/releases/latest"
             }
 
             val response = httpClient.get(apiUrl).body<ApiReleaseResponse>()
 
             if (response.tagName.isBlank()) {
-                return@withContext UpdateStatus.Error("远程数据异常，请更换仓库重试")
+                return@withContext UpdateStatus.Error("远程数据异常，请稍后重试")
             }
 
             val latestVersion = response.tagName.removePrefix("v").removePrefix("V").trim()
@@ -110,11 +107,10 @@ class UpdateChecker(
             } else if (response.tagName.isNotEmpty()) {
                 val fallbackTagUrl = when (platform) {
                     UpdatePlatform.GITHUB -> "https://github.com/$GITHUB_REPO/releases/tag/${response.tagName}"
-                    UpdatePlatform.GITEE -> "https://gitee.com/$GITEE_REPO/releases/tag/${response.tagName}"
                 }
                 Pair(fallbackTagUrl, false)
             } else {
-                return@withContext UpdateStatus.Error("远程数据异常，请更换仓库重试")
+                return@withContext UpdateStatus.Error("远程数据异常，请稍后重试")
             }
 
             UpdateStatus.Found(

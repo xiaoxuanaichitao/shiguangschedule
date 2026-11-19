@@ -1,6 +1,7 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,24 +12,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,7 +62,6 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
-import shiguangschedule.shared.generated.resources.arrow_back_24px
 import shiguangschedule.shared.generated.resources.check_circle_24px
 import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.school_24px
@@ -136,7 +135,6 @@ class CumtAuthViewModel(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CumtAuthScreen(
     onNavigate: (Destination) -> Unit,
@@ -158,15 +156,14 @@ fun CumtAuthScreen(
         }
     }
 
+    val isBound = profile.username.isNotBlank()
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("矿大统一身份认证") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.arrow_back_24px), contentDescription = "返回")
-                    }
-                }
+            CumtTopBar(
+                title = "统一身份认证",
+                subtitle = "中国矿业大学官方 CAS 登录中心",
+                onBack = onBack
             )
         }
     ) { paddingValues ->
@@ -176,67 +173,96 @@ fun CumtAuthScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
-            // 绑定状态卡片
-            if (profile.username.isNotBlank()) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+            // 绑定身份状态 Hero 卡片
+            CumtHeroGradientCard(
+                gradientColors = if (isBound) {
+                    listOf(Color(0xFF0E7C86), Color(0xFF137E52))
+                } else {
+                    listOf(Color(0xFF2843A8), Color(0xFF0A6CA8))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(
-                            imageVector = vectorResource(Res.drawable.check_circle_24px),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "已绑定 ${profile.name.ifBlank { "矿大同学" }}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "学号: ${profile.username}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = vectorResource(
+                                    if (isBound) Res.drawable.check_circle_24px else Res.drawable.school_24px
+                                ),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
-                        TextButton(
-                            onClick = viewModel::logout,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isBound) {
+                                "已绑定 ${profile.name.ifBlank { "矿大同学" }}"
+                            } else {
+                                "尚未绑定矿大校园账号"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = if (isBound) {
+                                "学号 ${profile.username} · 本机安全加密"
+                            } else {
+                                "绑定后可查询一卡通、图书馆借阅与快速导入课表"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+                    if (isBound) {
+                        Surface(
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(50),
+                            onClick = viewModel::logout
                         ) {
-                            Text("解绑")
+                            Text(
+                                text = "解绑",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
                         }
                     }
                 }
             }
 
             // 登录表单
-            Card(modifier = Modifier.fillMaxWidth()) {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            vectorResource(Res.drawable.school_24px),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                        CumtIconBadge(
+                            icon = Res.drawable.school_24px,
+                            accent = CumtAccent.TEAL,
+                            size = 38.dp,
+                            iconSize = 20.dp
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(10.dp))
                         Text(
-                            text = if (profile.username.isBlank()) "绑定矿大统一身份认证" else "重新验证或切换账号",
+                            text = if (isBound) "重新验证或切换账号" else "填写矿大统一身份认证凭据",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -246,6 +272,7 @@ fun CumtAuthScreen(
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("学号 / 工号") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         modifier = Modifier.fillMaxWidth()
@@ -255,6 +282,7 @@ fun CumtAuthScreen(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("统一身份认证密码") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
@@ -268,7 +296,10 @@ fun CumtAuthScreen(
                     Button(
                         onClick = { viewModel.login(username, password, onSuccess = onBack) },
                         enabled = !isLoggingIn && username.isNotBlank() && password.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
                     ) {
                         if (isLoggingIn) {
                             CircularProgressIndicator(
@@ -279,54 +310,82 @@ fun CumtAuthScreen(
                             Spacer(Modifier.width(8.dp))
                             Text("正在直连矿大 CAS 认证...")
                         } else {
-                            Text("验证并本地加密保存")
+                            Text("验证并本地加密保存", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
             }
 
             // 网络环境检测 & 校外 VPN 入口
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            vectorResource(Res.drawable.info_24px),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CumtIconBadge(
+                                icon = Res.drawable.info_24px,
+                                accent = CumtAccent.SLATE,
+                                size = 34.dp,
+                                iconSize = 18.dp
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "隐私与网络环境",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        val netAccent = when (intranetStatus) {
+                            true -> CumtAccent.EMERALD
+                            false -> CumtAccent.CORAL
+                            null -> CumtAccent.SLATE
+                        }
+                        CumtStatusPill(
+                            text = when (intranetStatus) {
+                                true -> "内网直连可用"
+                                false -> "当前为校外网络"
+                                null -> "检测中..."
+                            },
+                            containerColor = netAccent.containerColor(),
+                            contentColor = netAccent.contentColor(),
+                            dotColor = netAccent.contentColor()
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text("隐私、网络与说明", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     }
+
                     Text(
-                        text = "• 本应用直连中国矿业大学官方认证服务器，不经第三方服务器中转，凭据仅使用系统安全密钥加密保存于本机。",
+                        text = "• 本应用直连中国矿业大学官方认证服务器，不经任何第三方服务器中转，凭据仅使用本地加密存储。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = when (intranetStatus) {
-                            true -> "• 教务内网检测：当前已可直连教务系统。"
-                            false -> "• 教务内网检测：当前处于校外网络，统一认证仍可绑定，但访问教务系统建议连接校园网或矿大 VPN。"
-                            null -> "• 教务内网检测中..."
+                            true -> "• 教务内网检测：当前网络可直接访问矿大教务与考试查询系统。"
+                            false -> "• 教务内网检测：校外网络仍可绑定 CAS 账号，但同步课表、成绩与考表建议连接校园网或 VPN。"
+                            null -> "• 正在探测校内教务网连通状态..."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = viewModel::checkIntranet) {
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FilledTonalButton(
+                            onClick = viewModel::checkIntranet,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
                             Text("重新检测内网")
                         }
                         OutlinedButton(
                             onClick = {
                                 onNavigate(Destination.WebView(CumtConstants.VPN_GUIDE_CLIENT_URL, null))
-                            }
+                            },
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("校外 VPN 指南")
                         }

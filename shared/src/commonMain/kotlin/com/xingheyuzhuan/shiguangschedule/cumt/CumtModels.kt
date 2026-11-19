@@ -74,7 +74,11 @@ data class CumtExamItem(
     val year: Int,
     val month: Int,
     val day: Int,
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val seatNumber: String = "",
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val syncedToSchedule: Boolean = false
 )
 
 @Serializable

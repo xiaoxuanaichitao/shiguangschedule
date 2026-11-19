@@ -1,11 +1,10 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,22 +14,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,6 +40,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -65,7 +63,6 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
-import shiguangschedule.shared.generated.resources.arrow_back_24px
 import shiguangschedule.shared.generated.resources.bolt_24px
 import shiguangschedule.shared.generated.resources.refresh_24px
 import kotlin.math.round
@@ -128,7 +125,6 @@ private fun formatPower(value: Double): String {
     return "$whole.$frac"
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CumtDormPowerScreen(
     onNavigate: (Destination) -> Unit,
@@ -151,22 +147,25 @@ fun CumtDormPowerScreen(
         }
     }
 
+    val isBound = powerInfo.roomId.isNotBlank()
+    val isLowPower = isBound && powerInfo.remainingPower < 15.0
     val ratio = if (powerInfo.maxPower > 0.0) {
         (powerInfo.remainingPower / powerInfo.maxPower).toFloat().coerceIn(0f, 1f)
     } else 0f
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("宿舍电量") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(vectorResource(Res.drawable.arrow_back_24px), contentDescription = "返回")
-                    }
-                },
+            CumtTopBar(
+                title = "宿舍电量",
+                subtitle = if (isBound) "${powerInfo.buildingName} ${powerInfo.roomId}" else "南湖校区实时购电查询",
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = viewModel::refreshSaved) {
-                        Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = "刷新")
+                        if (isQuerying) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = "刷新")
+                        }
                     }
                 }
             )
@@ -178,29 +177,34 @@ fun CumtDormPowerScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
             // 电量环形仪表盘卡片
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 22.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    val primaryColor = if (powerInfo.remainingPower < 15.0 && powerInfo.roomId.isNotBlank()) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
+                    val statusAccent = when {
+                        !isBound -> CumtAccent.SLATE
+                        isLowPower -> CumtAccent.CORAL
+                        powerInfo.remainingPower < 30.0 -> CumtAccent.AMBER
+                        else -> CumtAccent.EMERALD
                     }
-                    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    val arcColor = if (!isBound) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        statusAccent.contentColor()
+                    }
+                    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
 
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(168.dp)) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(182.dp)) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
-                            val strokeWidth = 14.dp.toPx()
+                            val strokeWidth = 15.dp.toPx()
                             drawArc(
                                 color = trackColor,
                                 startAngle = 135f,
@@ -209,7 +213,14 @@ fun CumtDormPowerScreen(
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                             drawArc(
-                                color = primaryColor,
+                                color = arcColor.copy(alpha = 0.22f),
+                                startAngle = 135f,
+                                sweepAngle = 270f * ratio,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth + 6.dp.toPx(), cap = StrokeCap.Round)
+                            )
+                            drawArc(
+                                color = arcColor,
                                 startAngle = 135f,
                                 sweepAngle = 270f * ratio,
                                 useCenter = false,
@@ -220,13 +231,15 @@ fun CumtDormPowerScreen(
                             Icon(
                                 vectorResource(Res.drawable.bolt_24px),
                                 contentDescription = null,
-                                tint = primaryColor
+                                tint = arcColor,
+                                modifier = Modifier.size(26.dp)
                             )
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                text = if (powerInfo.roomId.isBlank()) "--" else formatPower(powerInfo.remainingPower),
-                                style = MaterialTheme.typography.headlineMedium,
+                                text = if (!isBound) "--" else formatPower(powerInfo.remainingPower),
+                                style = MaterialTheme.typography.headlineLarge,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = primaryColor
+                                color = arcColor
                             )
                             Text(
                                 text = "剩余度数 (kWh)",
@@ -236,45 +249,106 @@ fun CumtDormPowerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
+                    CumtStatusPill(
+                        text = when {
+                            !isBound -> "尚未绑定宿舍"
+                            isLowPower -> "电量偏低 · 建议及时购电"
+                            else -> "电量充足"
+                        },
+                        containerColor = statusAccent.containerColor(),
+                        contentColor = statusAccent.contentColor(),
+                        dotColor = statusAccent.contentColor()
+                    )
+
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        text = if (powerInfo.roomId.isNotBlank()) {
-                            "已绑定宿舍：${powerInfo.buildingName} ${powerInfo.roomId}"
+                        text = if (isBound) {
+                            "当前监测：${powerInfo.buildingName} ${powerInfo.roomId}"
                         } else {
-                            "尚未绑定宿舍，请在下方选择楼栋并填写房间号"
+                            "在下方选择宿舍楼并输入房间号即可一键绑定"
                         },
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                onNavigate(Destination.WebView(CumtConstants.YKT_RECHARGE_URL, null))
-                            }
-                        ) { Text("一卡通购电大厅") }
+
+                    Spacer(Modifier.height(14.dp))
+                    FilledTonalButton(
+                        onClick = {
+                            onNavigate(Destination.WebView(CumtConstants.YKT_RECHARGE_URL, null))
+                        },
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("前往一卡通购电大厅")
                     }
                 }
             }
 
             // 绑定配置表单
-            Card(modifier = Modifier.fillMaxWidth()) {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("绑定或切换宿舍（南湖校区）", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CumtDormBuilding.entries.forEach { b ->
-                            FilterChip(
-                                selected = selectedBuilding == b,
-                                onClick = { selectedBuilding = b },
-                                label = { Text(b.displayName) }
-                            )
+                        Text(
+                            text = "绑定或切换宿舍",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        CumtStatusPill(
+                            text = "南湖校区",
+                            containerColor = CumtAccent.AMBER.containerColor(),
+                            contentColor = CumtAccent.AMBER.contentColor()
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CumtDormBuilding.entries.chunked(4).forEach { rowBuildings ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowBuildings.forEach { b ->
+                                    val selected = selectedBuilding == b
+                                    Surface(
+                                        onClick = { selectedBuilding = b },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHigh
+                                        },
+                                        border = if (selected) {
+                                            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                                        } else null,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = b.displayName,
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                                        )
+                                    }
+                                }
+                                repeat(4 - rowBuildings.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
 
@@ -282,6 +356,7 @@ fun CumtDormPowerScreen(
                         value = roomId,
                         onValueChange = { roomId = it },
                         label = { Text("宿舍房间号（如 M1A301 / A101）") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -290,6 +365,7 @@ fun CumtDormPowerScreen(
                         value = studentIdInput,
                         onValueChange = { studentIdInput = it },
                         label = { Text("关联学号（用于定位校园卡账户）") },
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         modifier = Modifier.fillMaxWidth()
@@ -298,7 +374,10 @@ fun CumtDormPowerScreen(
                     Button(
                         onClick = { viewModel.query(selectedBuilding, roomId, studentIdInput) },
                         enabled = !isQuerying && roomId.isNotBlank() && studentIdInput.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
                     ) {
                         if (isQuerying) {
                             CircularProgressIndicator(
@@ -309,7 +388,7 @@ fun CumtDormPowerScreen(
                             Spacer(Modifier.width(8.dp))
                             Text("正在查询电量...")
                         } else {
-                            Text("查询并保存宿舍绑定")
+                            Text("查询并保存宿舍绑定", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

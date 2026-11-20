@@ -1,5 +1,6 @@
 package com.xingheyuzhuan.shiguangschedule.cumt
 
+import com.xingheyuzhuan.shiguangschedule.data.model.ScheduleGridStyle
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -336,5 +337,28 @@ class CumtUnitTests {
                 weekIndexCalc = ::calcWeekIndexForTest
             )
         )
+    }
+
+    @Test
+    fun mobileAdaptationJsForCumtAndNonCumt() {
+        val jwxtJs = CumtWebScripts.mobileAdaptationJs("http://jwxt.cumt.edu.cn/jwglxt/xtgl/login_slogin.html")
+        assertNotNull(jwxtJs)
+        assertTrue(jwxtJs.contains("viewport"))
+        assertTrue(jwxtJs.contains("cumt-mobile-adapt"))
+
+        assertNull(CumtWebScripts.mobileAdaptationJs("https://example.com/"))
+    }
+
+    @Test
+    fun scheduleGridStyleDefaultMatchesRedesignedDefaults() {
+        val style = ScheduleGridStyle.DEFAULT
+        assertEquals(12, style.courseColorMaps.size)
+        assertTrue(style.hideGridLines)
+        assertTrue(style.hideTeacher)
+        assertTrue(style.removeLocationAt)
+        assertTrue(style.textAlignCenterHorizontal)
+        assertTrue(style.textAlignCenterVertical)
+        assertEquals(11f, style.courseBlockCornerRadiusDp)
+        assertEquals(2f, style.courseBlockOuterPaddingDp)
     }
 }

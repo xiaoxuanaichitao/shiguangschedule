@@ -7,6 +7,7 @@ import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfig
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfigDao
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableDao
 import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
+import com.xingheyuzhuan.shiguangschedule.data.model.AppThemeMode
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleGridStyleProto
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -158,6 +159,12 @@ class AppSettingsRepository(
         val appSettings = getAppSettingsOnce()
         return appSettings.holidays.any { holiday ->
             holiday.isHoliday && holiday.dates.contains(date)
+        }
+    }
+
+    suspend fun updateThemeMode(mode: AppThemeMode) {
+        dataStore.edit { prefs ->
+            prefs[AppSettingsModel.KEY_THEME_MODE] = mode.value
         }
     }
 

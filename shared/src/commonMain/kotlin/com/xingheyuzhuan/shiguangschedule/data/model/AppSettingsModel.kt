@@ -141,7 +141,7 @@ data class AppSettingsModel(
     val themeMode: AppThemeMode = AppThemeMode.FOLLOW_SYSTEM,
 
     /** 是否开启动态取色 (Material You) */
-    val useDynamicColor: Boolean = true,
+    val useDynamicColor: Boolean = false,
 
     /** 自定义主题主色（包含浅色和深色模式） */
     val customPrimaryColor: LightDarkValue<Long> = LightDarkValue(

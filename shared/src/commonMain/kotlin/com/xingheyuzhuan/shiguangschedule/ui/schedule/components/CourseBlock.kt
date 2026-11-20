@@ -5,7 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseWithWeeks
 import com.xingheyuzhuan.shiguangschedule.data.db.main.TimeSlot
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.BorderTypeProto
@@ -46,27 +50,39 @@ fun CourseBlock(
 ) {
     val course = courseWrapper.course
     val isDarkTheme = LocalIsDarkTheme.current
+    val isExam = course.id.startsWith(CumtParsers.EXAM_COURSE_ID_PREFIX)
 
     // 颜色适配
     val colorIndex = course.colorInt.takeIf { it in style.courseColorMaps.indices }
-    val courseColorAdapted: Color? = colorIndex?.let { index ->
-        val baseColorMap = style.courseColorMaps[index]
-        if (isDarkTheme) baseColorMap.dark else baseColorMap.light
+    val courseColorAdapted: Color? = if (isExam) {
+        if (isDarkTheme) Color(0xFF912E28) else Color(0xFFE8645B)
+    } else {
+        colorIndex?.let { index ->
+            val baseColorMap = style.courseColorMaps[index]
+            if (isDarkTheme) baseColorMap.dark else baseColorMap.light
+        }
     }
     val fallbackColorAdapted: Color = if (isDarkTheme) style.courseColorMaps.first().dark else style.courseColorMaps.first().light
 
     val currentAlpha = if (isFloating) 0.95f else style.courseBlockAlpha
-    val blockColor = (courseColorAdapted ?: fallbackColorAdapted).copy(alpha = currentAlpha)
-    val textColor = style.courseTextColor ?: MaterialTheme.colorScheme.onSurface
+    val baseColor = courseColorAdapted ?: fallbackColorAdapted
+    val blockColor = baseColor.copy(alpha = currentAlpha)
+    val bottomBlockColor = baseColor.copy(alpha = (currentAlpha * 0.90f).coerceIn(0.1f, 1f))
+    val textColor = style.courseTextColor ?: if (baseColor.luminance() > 0.72f) {
+        Color(0xFF1C242B)
+    } else {
+        Color.White
+    }
 
     // 字体大小
-    val s13 = (13 * style.fontScale).sp
-    val s10 = (10 * style.fontScale).sp
+    val sTitle = (11.5f * style.fontScale).sp
+    val sSub = (9.5f * style.fontScale).sp
+    val sTime = (9f * style.fontScale).sp
 
     // 核心分支逻辑：判断 24小时模式 与 节次模式 的时间文本渲染
     val customStartTime = course.customStartTime
     val customEndTime = course.customEndTime
-    val customTimeString = if (customStartTime != null && customEndTime != null) "$customStartTime - $customEndTime" else null
+    val customTimeString = if (customStartTime != null && customEndTime != null) "$customStartTime-$customEndTime" else null
     val isCustomTimeCourse = customTimeString != null
 
     val timeTextToShow = if (style.scheduleMode == ScheduleModeProto.TIME_24H_MODE) {
@@ -76,7 +92,7 @@ fun CourseBlock(
         } else {
             val startSlot = timeSlots.find { it.number == course.startSection }
             val endSlot = timeSlots.find { it.number == course.endSection }
-            if (startSlot != null && endSlot != null) "${startSlot.startTime} - ${endSlot.endTime}" else null
+            if (startSlot != null && endSlot != null) "${startSlot.startTime}-${endSlot.endTime}" else null
         }
     } else {
         // 传统节次模式：只有自定义课程显示起止时间；普通节次课程只有在开启展示开始时间时才显示开始时间
@@ -126,13 +142,18 @@ fun CourseBlock(
         Modifier
     }
 
+    val showTeacher = !style.hideTeacher && course.teacher.isNotBlank()
+    val showLocation = !style.hideLocation && course.position.isNotBlank()
+
     Box(
         modifier = modifier
             .then(floatingShadowModifier)
             .fillMaxSize()
             .then(borderModifier)
             .clip(shape)
-            .background(color = blockColor)
+            .background(
+                brush = Brush.verticalGradient(listOf(blockColor, bottomBlockColor))
+            )
     ) {
         // 课程文字内容容器
         Column(
@@ -141,40 +162,67 @@ fun CourseBlock(
             verticalArrangement = verticalArrangement
         ) {
             if (timeTextToShow != null) {
-                Text(
-                    text = timeTextToShow,
-                    fontSize = s10,
-                    color = textColor.copy(alpha = 0.8f),
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = textAlign,
-                    style = TextStyle(lineHeight = 1.em)
-                )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = Color.Black.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = timeTextToShow,
+                        fontSize = sTime,
+                        color = textColor,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        textAlign = textAlign,
+                        style = TextStyle(lineHeight = 1.1.em)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
             }
 
             Text(
                 text = course.name,
-                fontSize = s13,
-                fontWeight = FontWeight.Bold,
+                fontSize = sTitle,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.15.sp,
                 color = textColor,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = textAlign,
                 modifier = Modifier.weight(1f, fill = false),
-                style = TextStyle(lineHeight = 1.2.em)
+                style = TextStyle(lineHeight = 1.25.em)
             )
 
-            if (!style.hideTeacher) {
-                val teacher = course.teacher
-                if (teacher.isNotBlank()) {
-                    Text(text = teacher, fontSize = s10, color = textColor, textAlign = textAlign, overflow = TextOverflow.Ellipsis, style = TextStyle(lineHeight = 1.em))
-                }
+            if (showTeacher || showLocation) {
+                Spacer(modifier = Modifier.height(3.dp))
             }
 
-            if (!style.hideLocation) {
-                val position = course.position
-                if (position.isNotBlank()) {
-                    val prefix = if (style.removeLocationAt) "" else "@"
-                    Text(text = "$prefix$position", fontSize = s10, color = textColor, textAlign = textAlign, overflow = TextOverflow.Ellipsis, style = TextStyle(lineHeight = 1.em))
-                }
+            if (showTeacher) {
+                Text(
+                    text = course.teacher,
+                    fontSize = sSub,
+                    color = textColor.copy(alpha = 0.90f),
+                    textAlign = textAlign,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(lineHeight = 1.15.em)
+                )
+            }
+
+            if (showLocation) {
+                val formattedPos = course.position
+                    .replace("南湖校区 ", "南湖校区\n")
+                    .replace("文昌校区 ", "文昌校区\n")
+                val prefix = if (style.removeLocationAt) "" else "@"
+                Text(
+                    text = "$prefix$formattedPos",
+                    fontSize = sSub,
+                    color = textColor.copy(alpha = 0.88f),
+                    textAlign = textAlign,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(lineHeight = 1.2.em)
+                )
             }
         }
 

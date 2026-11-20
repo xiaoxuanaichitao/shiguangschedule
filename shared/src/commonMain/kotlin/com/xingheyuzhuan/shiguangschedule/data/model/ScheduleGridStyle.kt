@@ -65,15 +65,15 @@ data class ScheduleGridStyle(
     val courseBlockFontScale: Float = DEFAULT_FONT_SCALE,
 
     // 界面开关与布局控制
-    val hideGridLines: Boolean = false,
+    val hideGridLines: Boolean = true,
     val hideSectionTime: Boolean = false,
     val hideDateUnderDay: Boolean = false,
     val showStartTime: Boolean = false,
     val hideLocation: Boolean = false,
-    val hideTeacher: Boolean = false,
-    val removeLocationAt: Boolean = false,
-    val textAlignCenterHorizontal: Boolean = false,
-    val textAlignCenterVertical: Boolean = false,
+    val hideTeacher: Boolean = true,
+    val removeLocationAt: Boolean = true,
+    val textAlignCenterHorizontal: Boolean = true,
+    val textAlignCenterVertical: Boolean = true,
     val borderType: BorderTypeProto = BorderTypeProto.BORDER_TYPE_NONE,
     val scheduleMode: ScheduleModeProto = ScheduleModeProto.SECTION_MODE,
     val pageTextColorLong: Long? = null,
@@ -90,28 +90,28 @@ data class ScheduleGridStyle(
 
     companion object {
         // --- 默认常量
-        val DEFAULT_TIME_COLUMN_WIDTH = 40f
-        val DEFAULT_DAY_HEADER_HEIGHT = 45f
-        val DEFAULT_SECTION_HEIGHT = 70f
-        val DEFAULT_BLOCK_CORNER_RADIUS = 4f
-        val DEFAULT_BLOCK_OUTER_PADDING = 1f
-        val DEFAULT_BLOCK_INNER_PADDING = 4f
+        val DEFAULT_TIME_COLUMN_WIDTH = 42f
+        val DEFAULT_DAY_HEADER_HEIGHT = 52f
+        val DEFAULT_SECTION_HEIGHT = 64f
+        val DEFAULT_BLOCK_CORNER_RADIUS = 11f
+        val DEFAULT_BLOCK_OUTER_PADDING = 2f
+        val DEFAULT_BLOCK_INNER_PADDING = 5f
         val DEFAULT_BLOCK_ALPHA = 1f
         val DEFAULT_FONT_SCALE = 1f
 
         val DEFAULT_COLOR_MAPS = listOf(
-            DualColor(light = Color(0xFFFFCC99), dark = Color(0xFF663300)),
-            DualColor(light = Color(0xFFFFE699), dark = Color(0xFF664D00)),
-            DualColor(light = Color(0xFFE6FF99), dark = Color(0xFF4D6600)),
-            DualColor(light = Color(0xFFCCFF99), dark = Color(0xFF336600)),
-            DualColor(light = Color(0xFF99FFB3), dark = Color(0xFF00661A)),
-            DualColor(light = Color(0xFF99FFE6), dark = Color(0xFF00664D)),
-            DualColor(light = Color(0xFF99FFFF), dark = Color(0xFF006666)),
-            DualColor(light = Color(0xFF99E6FF), dark = Color(0xFF004D66)),
-            DualColor(light = Color(0xFFB399FF), dark = Color(0xFF1A0066)),
-            DualColor(light = Color(0xFFFF99E6), dark = Color(0xFF66004D)),
-            DualColor(light = Color(0xFFFF99CC), dark = Color(0xFF660033)),
-            DualColor(light = Color(0xFFFF99B3), dark = Color(0xFF66001A)),
+            DualColor(light = Color(0xFF63C9A3), dark = Color(0xFF287058)),
+            DualColor(light = Color(0xFF6F9BF8), dark = Color(0xFF2D4C92)),
+            DualColor(light = Color(0xFFF48E92), dark = Color(0xFF8C3B40)),
+            DualColor(light = Color(0xFFA68CF2), dark = Color(0xFF533D91)),
+            DualColor(light = Color(0xFF47BCC7), dark = Color(0xFF1E676E)),
+            DualColor(light = Color(0xFFF69966), dark = Color(0xFF8E4D25)),
+            DualColor(light = Color(0xFF5BA8F2), dark = Color(0xFF22578C)),
+            DualColor(light = Color(0xFF77C47B), dark = Color(0xFF336B37)),
+            DualColor(light = Color(0xFFEB7FA9), dark = Color(0xFF843255)),
+            DualColor(light = Color(0xFFE5AB4F), dark = Color(0xFF845B1A)),
+            DualColor(light = Color(0xFF7B8FE0), dark = Color(0xFF384682)),
+            DualColor(light = Color(0xFFE8645B), dark = Color(0xFF912E28)),
         )
 
         /**
@@ -127,15 +127,15 @@ data class ScheduleGridStyle(
             courseBlockAlphaFloat = DEFAULT_BLOCK_ALPHA,
             courseColorMaps = DEFAULT_COLOR_MAPS,
             courseBlockFontScale = DEFAULT_FONT_SCALE,
-            hideGridLines = false,
+            hideGridLines = true,
             hideSectionTime = false,
             hideDateUnderDay = false,
             showStartTime = false,
             hideLocation = false,
-            hideTeacher = false,
-            removeLocationAt = false,
-            textAlignCenterHorizontal = false,
-            textAlignCenterVertical = false,
+            hideTeacher = true,
+            removeLocationAt = true,
+            textAlignCenterHorizontal = true,
+            textAlignCenterVertical = true,
             borderType = BorderTypeProto.BORDER_TYPE_NONE,
             scheduleMode = ScheduleModeProto.SECTION_MODE,
             pageTextColorLong = null,

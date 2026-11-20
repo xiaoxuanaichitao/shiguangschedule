@@ -172,9 +172,7 @@ class SettingsViewModel(
      */
     fun onThemeModeChanged(newMode: AppThemeMode) {
         viewModelScope.launch {
-            val currentSettings = uiState.value.appSettings
-            val updatedSettings = currentSettings.copy(themeMode = newMode)
-            appSettingsRepository.insertOrUpdateAppSettings(updatedSettings)
+            appSettingsRepository.updateThemeMode(newMode)
         }
     }
 

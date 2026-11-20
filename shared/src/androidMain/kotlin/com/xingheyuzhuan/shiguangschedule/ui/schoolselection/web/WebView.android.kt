@@ -144,11 +144,7 @@ actual fun PlatformWebView(
         androidController?.webViewInstance?.let { wv ->
             val delegate = WebCompatDelegate(wv)
             delegate.enhanceSettings(isDesktopMode)
-            if (isDesktopMode) {
-                wv.setInitialScale(100)
-            } else {
-                wv.setInitialScale(0)
-            }
+            wv.setInitialScale(0)
 
             val currentRealUrl = wv.url?.takeIf { it.isNotBlank() && it != "about:blank" } ?: url
             if (currentRealUrl.isNotBlank() && currentRealUrl != "about:blank") {
@@ -172,11 +168,7 @@ actual fun PlatformWebView(
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
 
-                    if (isDesktopMode) {
-                        setInitialScale(100)
-                    } else {
-                        setInitialScale(0)
-                    }
+                    setInitialScale(0)
 
                     androidController?.webViewInstance = this
 

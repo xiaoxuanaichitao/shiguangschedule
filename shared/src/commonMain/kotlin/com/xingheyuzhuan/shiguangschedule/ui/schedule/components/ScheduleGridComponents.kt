@@ -2,6 +2,7 @@ package com.xingheyuzhuan.shiguangschedule.ui.schedule.components
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -45,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseWithWeeks
 import com.xingheyuzhuan.shiguangschedule.data.db.main.TimeSlot
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.MergedCourseBlock
+import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -166,6 +170,15 @@ fun DayHeader(
     subTextColor: Color,
     strokeWidthPx: Float
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val monthLabel = remember(dates, currentYear) {
+        val monthNum = dates.firstOrNull()
+            ?.split('/', '-')
+            ?.firstOrNull()
+            ?.toIntOrNull()
+        if (monthNum != null) "${monthNum}月" else currentYear
+    }
+
     BoxWithConstraints(Modifier.fillMaxWidth().height(style.dayHeaderHeight)) {
         val shouldShowDate = !style.hideDateUnderDay && maxHeight >= 42.dp
 
@@ -187,23 +200,12 @@ fun DayHeader(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = currentYear,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = monthLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
                         color = subTextColor,
                         style = TextStyle.Default
                     )
-
-                    if (!currentWeek.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.height(1.dp))
-                        Text(
-                            text = currentWeek,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = subTextColor,
-                            style = TextStyle.Default
-                        )
-                    }
                 }
             }
 
@@ -225,11 +227,39 @@ fun DayHeader(
                     }
             ) {
                 displayDays.forEachIndexed { index, day ->
+                    val isToday = index == todayIndex
+                    val displayLabel = if (day.length == 1 && day[0] in '\u4E00'..'\u9FFF') "周$day" else day
+                    val pillBg = if (isToday) {
+                        if (isDark) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else Color(0xFFCFF2EA)
+                    } else {
+                        Color.Transparent
+                    }
+                    val pillBorder = if (isToday) {
+                        if (isDark) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else Color(0xFF38B29A)
+                    } else {
+                        Color.Transparent
+                    }
+                    val dayTextColor = if (isToday) {
+                        if (isDark) MaterialTheme.colorScheme.onPrimaryContainer else Color(0xFF0B6E65)
+                    } else {
+                        textColor
+                    }
+                    val dateTextColor = if (isToday) dayTextColor.copy(alpha = 0.85f) else subTextColor
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(if (index == todayIndex) MaterialTheme.colorScheme.primaryContainer.copy(0.4f) else Color.Transparent),
+                            .padding(horizontal = 2.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(pillBg)
+                            .then(
+                                if (isToday) {
+                                    Modifier.border(1.dp, pillBorder, RoundedCornerShape(10.dp))
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -240,10 +270,10 @@ fun DayHeader(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = day,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = textColor,
+                                text = displayLabel,
+                                fontSize = 13.sp,
+                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                                color = dayTextColor,
                                 maxLines = 1,
                                 style = TextStyle(
                                     lineHeight = 16.sp
@@ -255,7 +285,8 @@ fun DayHeader(
                                 Text(
                                     text = dates[index],
                                     fontSize = 10.sp,
-                                    color = subTextColor,
+                                    fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal,
+                                    color = dateTextColor,
                                     maxLines = 1,
                                     style = TextStyle(
                                         lineHeight = 12.sp
@@ -310,7 +341,6 @@ fun TimeColumn(
                     .fillMaxWidth()
                     .height(style.sectionHeight)
                     .clickable { onTimeSlotClicked() }
-                    .background(if (isCurrentHourActive) MaterialTheme.colorScheme.primaryContainer.copy(0.4f) else Color.Transparent)
                     .drawBehind {
                         if (!style.hideGridLines) {
                             drawLine(lineColor, Offset(size.width, 0f), Offset(size.width, size.height), strokeWidthPx)
@@ -322,54 +352,63 @@ fun TimeColumn(
                 contentAlignment = if (is24HourMode) Alignment.TopCenter else Alignment.Center
             ) {
                 val h = maxHeight
-                if (is24HourMode && activeDragMinuteStr != null && index == activeDragHour) {
-                    Box(
-                        modifier = Modifier.matchParentSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = ":$activeDragMinuteStr",
-                            fontSize = if (h < 32.dp) 11.sp else 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor
-                        )
-                    }
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = if (is24HourMode) Arrangement.Top else Arrangement.Center,
+                Box(
                     modifier = Modifier
-                        .padding(horizontal = 1.dp)
-                        .then(if (is24HourMode) Modifier.offset(y = (-7).dp) else Modifier)
+                        .fillMaxSize()
+                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isCurrentHourActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent),
+                    contentAlignment = if (is24HourMode) Alignment.TopCenter else Alignment.Center
                 ) {
-                    if (is24HourMode) {
-                        val formatHourStr = "${index.toString().padStart(2, '0')}:00"
-                        Text(
-                            text = formatHourStr,
-                            fontSize = if (h < 32.dp) 11.sp else 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (isCurrentHourActive) MaterialTheme.colorScheme.primary else textColor
-                        )
-                    } else {
-                        val slot = timeSlots.getOrNull(index)
-                        if (slot != null) {
+                    if (is24HourMode && activeDragMinuteStr != null && index == activeDragHour) {
+                        Box(
+                            modifier = Modifier.matchParentSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = slot.alias ?: slot.number.toString(),
-                                fontSize = if (h < 32.dp) 11.sp else 14.sp,
+                                text = ":$activeDragMinuteStr",
+                                fontSize = if (h < 32.dp) 11.sp else 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = textColor,
-                                overflow = TextOverflow.Ellipsis
+                                color = textColor
                             )
-                            if (!style.hideSectionTime) {
-                                when {
-                                    h >= 52.dp -> {
-                                        Spacer(Modifier.height(2.dp))
-                                        TimeText(slot.startTime, subTextColor)
-                                        TimeText(slot.endTime, subTextColor)
-                                    }
-                                    h >= 38.dp -> {
-                                        Text(text = "${slot.startTime}-${slot.endTime}", fontSize = 8.sp, color = subTextColor, maxLines = 1)
+                        }
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = if (is24HourMode) Arrangement.Top else Arrangement.Center,
+                        modifier = Modifier
+                            .padding(horizontal = 1.dp)
+                            .then(if (is24HourMode) Modifier.offset(y = (-7).dp) else Modifier)
+                    ) {
+                        if (is24HourMode) {
+                            val formatHourStr = "${index.toString().padStart(2, '0')}:00"
+                            Text(
+                                text = formatHourStr,
+                                fontSize = if (h < 32.dp) 11.sp else 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isCurrentHourActive) MaterialTheme.colorScheme.primary else textColor
+                            )
+                        } else {
+                            val slot = timeSlots.getOrNull(index)
+                            if (slot != null) {
+                                Text(
+                                    text = slot.alias ?: slot.number.toString(),
+                                    fontSize = if (h < 32.dp) 11.sp else 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = textColor,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (!style.hideSectionTime) {
+                                    when {
+                                        h >= 52.dp -> {
+                                            Spacer(Modifier.height(2.dp))
+                                            TimeText(slot.startTime, subTextColor)
+                                            TimeText(slot.endTime, subTextColor)
+                                        }
+                                        h >= 38.dp -> {
+                                            Text(text = "${slot.startTime}-${slot.endTime}", fontSize = 8.sp, color = subTextColor, maxLines = 1)
+                                        }
                                     }
                                 }
                             }
@@ -444,7 +483,12 @@ private fun EditHandleDot() {
 
 @Composable
 fun TimeText(text: String, color: Color) {
-    Text(text = text, fontSize = 10.sp, color = color, style = TextStyle(lineHeight = 1.em))
+    Text(
+        text = text,
+        fontSize = 9.sp,
+        color = color.copy(alpha = 0.85f),
+        style = TextStyle(lineHeight = 1.1.em)
+    )
 }
 
 /**

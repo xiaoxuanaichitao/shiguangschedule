@@ -289,6 +289,7 @@ fun CumtJwxtExtractScreen(
                     onTitleChange = { if (it.isNotBlank()) pageTitle = it },
                     onNavigateToSchedule = {},
                     onPageLoaded = { loadedUrl ->
+                        CumtWebScripts.mobileAdaptationJs(loadedUrl)?.let { controller.executeScript(it) }
                         coroutineScope.launch {
                             viewModel.getAutoFillJs(loadedUrl)?.let { controller.executeScript(it) }
                         }

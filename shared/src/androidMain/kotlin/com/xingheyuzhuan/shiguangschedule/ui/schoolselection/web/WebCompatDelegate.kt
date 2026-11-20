@@ -43,8 +43,8 @@ class WebCompatDelegate(private val webView: WebView) {
             if (isDesktopMode) {
                 userAgentString = DESKTOP_USER_AGENT
                 layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
-                useWideViewPort = false
-                loadWithOverviewMode = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
             } else {
                 userAgentString = defaultUserAgent
                 layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL

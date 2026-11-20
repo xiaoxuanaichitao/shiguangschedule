@@ -21,21 +21,16 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.xingheyuzhuan.shiguangschedule.data.model.AppThemeMode
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdvancedColorPicker
 import com.xingheyuzhuan.shiguangschedule.ui.components.ColorPickerConfig
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSurfaceCard
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtTopBar
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
 import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import com.xingheyuzhuan.shiguangschedule.ui.theme.supportsDynamicColor
@@ -58,9 +55,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import shiguangschedule.shared.generated.resources.Res
-import shiguangschedule.shared.generated.resources.a11y_back
 import shiguangschedule.shared.generated.resources.action_reset
-import shiguangschedule.shared.generated.resources.arrow_back_24px
 import shiguangschedule.shared.generated.resources.custom_color_title
 import shiguangschedule.shared.generated.resources.dark_primary_color
 import shiguangschedule.shared.generated.resources.dynamic_color_desc
@@ -80,34 +75,14 @@ fun ThemeSettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val settings = uiState.appSettings
 
-    val surfaceColor = MaterialTheme.colorScheme.surface
-
     Scaffold(
-        containerColor = surfaceColor,
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            Surface(
-                color = surfaceColor,
-                tonalElevation = 0.dp
-            ) {
-                TopAppBar(
-                    title = { Text(stringResource(Res.string.theme_settings_title)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                vectorResource(Res.drawable.arrow_back_24px),
-                                contentDescription = stringResource(Res.string.a11y_back)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-            }
+            CumtTopBar(
+                title = stringResource(Res.string.theme_settings_title),
+                subtitle = "支持浅色 / 深色 / 跟随系统切换与个性化主色",
+                onBack = onBack
+            )
         }
     ) { padding ->
         Column(
@@ -119,15 +94,21 @@ fun ThemeSettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 主题模式选择
-            SectionHeader(stringResource(Res.string.theme_mode_label))
-            ThemeModeSelector(
-                selectedMode = settings.themeMode,
-                onModeSelected = { viewModel.onThemeModeChanged(it) }
-            )
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SectionHeader(stringResource(Res.string.theme_mode_label))
+                    ThemeModeSelector(
+                        selectedMode = settings.themeMode,
+                        onModeSelected = { viewModel.onThemeModeChanged(it) }
+                    )
+                }
+            }
 
             // 动态取色 (利用跨平台 supportsDynamicColor 统一处理)
             if (supportsDynamicColor) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 DynamicColorToggle(
                     enabled = settings.useDynamicColor,
                     onEnabledChange = { viewModel.onUseDynamicColorChanged(it) }
@@ -143,7 +124,7 @@ fun ThemeSettingsScreen(
                 exit = shrinkVertically()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     SectionHeader(stringResource(Res.string.custom_color_title))
 
                     val isDark = LocalIsDarkTheme.current
@@ -187,10 +168,9 @@ private fun ColorPickerItem(
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
 
-    Surface(
+    CumtSurfaceCard(
         onClick = { showSheet = true },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -272,10 +252,9 @@ private fun DynamicColorToggle(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit
 ) {
-    Surface(
+    CumtSurfaceCard(
         onClick = { onEnabledChange(!enabled) },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),

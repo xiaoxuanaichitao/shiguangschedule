@@ -365,6 +365,9 @@ fun WebViewScreen(
                 onTitleChange = { pageTitle = it },
                 onNavigateToSchedule = { onNavigate(Destination.CourseSchedule) },
                 onPageLoaded = { loadedUrl ->
+                    CumtWebScripts.mobileAdaptationJs(loadedUrl)?.let { js ->
+                        webViewController.executeScript(js)
+                    }
                     coroutineScope.launch {
                         viewModel.getAutoFillScript(loadedUrl)?.let { js ->
                             webViewController.executeScript(js)

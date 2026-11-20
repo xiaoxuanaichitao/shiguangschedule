@@ -36,7 +36,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -313,6 +315,8 @@ fun CourseTimelineItem(
         ScheduleGridStyle.DEFAULT_COLOR_MAPS[0]
     }
     val themeColor = if (isDark) colorPair.dark else colorPair.light
+    val cardTextColor = if (themeColor.luminance() > 0.72f) Color(0xFF1C242B) else Color.White
+    val cardSubTextColor = cardTextColor.copy(alpha = 0.85f)
 
     Row(
         modifier = Modifier
@@ -358,7 +362,7 @@ fun CourseTimelineItem(
                             textDecoration = if (isFinished) TextDecoration.LineThrough else null
                         ),
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = cardTextColor,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -366,7 +370,7 @@ fun CourseTimelineItem(
                         Text(
                             text = stringResource(Res.string.course_position_prefix, model.course.position),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = cardSubTextColor,
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
@@ -375,7 +379,7 @@ fun CourseTimelineItem(
                         Text(
                             text = stringResource(Res.string.course_teacher_prefix, model.course.teacher),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = cardSubTextColor
                         )
                     }
 
@@ -390,7 +394,7 @@ fun CourseTimelineItem(
                         Text(
                             text = "$creditLabel: $creditValStr",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = cardSubTextColor
                         )
                     }
                 }

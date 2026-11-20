@@ -6,7 +6,9 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +27,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleModeProto
@@ -42,7 +45,8 @@ fun ScheduleGrid(
     viewState: ScheduleGridViewState,
     actions: ScheduleGridActions,
     style: ScheduleGridStyleComposed,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    bottomExtraPadding: Dp = 0.dp
 ) {
     Box(modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -171,12 +175,13 @@ fun ScheduleGrid(
         Column(Modifier.fillMaxSize()) {
             DayHeader(style, displayDays, viewState.dates, viewState.currentYear, viewState.currentWeek, viewState.todayIndex, gridLineColor, pageTextColor, pageSubTextColor, strokeWidthPx)
 
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .onSizeChanged { state.viewportHeightPx = it.height.toFloat() }
                     .verticalScroll(state = state.gridScrollState, enabled = state.expandedItem == null)
             ) {
+                Row(modifier = Modifier.fillMaxWidth()) {
                 TimeColumn(
                     style = style, timeSlots = viewState.timeSlots, maxGridSections = maxGridSections,
                     is24HourMode = is24HourMode, onTimeSlotClicked = { actions.onTimeSlotClicked() },
@@ -447,6 +452,10 @@ fun ScheduleGrid(
                     }
                 }
             }
+            if (bottomExtraPadding > 0.dp) {
+                Spacer(modifier = Modifier.height(bottomExtraPadding))
+            }
+        }
         }
     }
 }

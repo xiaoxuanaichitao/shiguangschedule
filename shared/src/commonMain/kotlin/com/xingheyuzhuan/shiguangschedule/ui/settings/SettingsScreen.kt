@@ -45,7 +45,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xingheyuzhuan.shiguangschedule.Destination
+import com.xingheyuzhuan.shiguangschedule.data.model.AppThemeMode
 import com.xingheyuzhuan.shiguangschedule.ui.components.NativeNumberPicker
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSegmentedBar
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSurfaceCard
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -172,6 +175,13 @@ fun SettingsScreen(
                 )
             ) {
                 item {
+                    AppearanceQuickSection(
+                        selectedThemeMode = appSettings.themeMode,
+                        onThemeModeSelected = viewModel::onThemeModeChanged,
+                        onThemeSettingsClick = { onNavigate(Destination.ThemeSettings) }
+                    )
+                }
+                item {
                     GeneralSettingsSection(
                         showNonCurrentWeek = appSettings.showNonCurrentWeekCourses,
                         onShowNonCurrentWeekChanged = { isChecked -> viewModel.onShowNonCurrentWeekChanged(isChecked) },
@@ -269,6 +279,42 @@ fun SettingsScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+/**
+ * 外观与深浅色快速切换卡片
+ */
+@Composable
+private fun AppearanceQuickSection(
+    selectedThemeMode: AppThemeMode,
+    onThemeModeSelected: (AppThemeMode) -> Unit,
+    onThemeSettingsClick: () -> Unit
+) {
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(SETTING_PADDING),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "外观与主题模式",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            CumtSegmentedBar(
+                options = listOf("跟随系统", "浅色", "深色"),
+                selectedIndex = AppThemeMode.entries.indexOf(selectedThemeMode).coerceAtLeast(0),
+                onSelect = { index -> onThemeModeSelected(AppThemeMode.entries[index]) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            SettingItem(
+                title = "主题配色与动态取色",
+                subtitle = "切换浅色/深色模式、动态取色或自定义主题色",
+                onClick = onThemeSettingsClick
+            )
         }
     }
 }

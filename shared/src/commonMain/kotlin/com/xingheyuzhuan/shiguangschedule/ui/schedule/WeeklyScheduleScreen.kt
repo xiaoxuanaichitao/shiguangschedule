@@ -1,23 +1,25 @@
 package com.xingheyuzhuan.shiguangschedule.ui.schedule
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,11 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.xingheyuzhuan.shiguangschedule.Destination
@@ -60,6 +67,7 @@ import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridVie
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WeekSelectorBottomSheet
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.rememberScheduleGridState
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.MergedCourseBlock
+import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
@@ -74,7 +82,9 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.action_select_table
+import shiguangschedule.shared.generated.resources.add_24px
 import shiguangschedule.shared.generated.resources.arrow_drop_down_24px
+import shiguangschedule.shared.generated.resources.contrast_24px
 import shiguangschedule.shared.generated.resources.format_week_display
 import shiguangschedule.shared.generated.resources.snackbar_add_course_within_semester
 import shiguangschedule.shared.generated.resources.swap_horiz_24px
@@ -96,7 +106,7 @@ fun WeeklyScheduleScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val isDark = isSystemInDarkTheme()
+    val isDark = LocalIsDarkTheme.current
     LaunchedEffect(isDark) {
         viewModel.updateDarkTheme(isDark)
     }
@@ -193,7 +203,21 @@ fun WeeklyScheduleScreen(
     val systemNavigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val dynamicBottomOffset = systemNavigationBarInset + (88.dp * (1f - navHideFraction))
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val screenBgModifier = if (uiState.wallpaperPath == null) {
+        if (isDark) {
+            Modifier.background(MaterialTheme.colorScheme.background)
+        } else {
+            Modifier.background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFF2FBF8), Color(0xFFF8FAFC))
+                )
+            )
+        }
+    } else {
+        Modifier
+    }
+
+    Box(modifier = Modifier.fillMaxSize().then(screenBgModifier)) {
         uiState.wallpaperPath?.let { path ->
             AsyncImage(
                 model = path,
@@ -210,11 +234,12 @@ fun WeeklyScheduleScreen(
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                CenterAlignedTopAppBar(
+                TopAppBar(
                     title = {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
                                     if (!uiState.isSemesterSet || uiState.semesterStartDate == null) {
                                         onNavigate(Destination.Settings)
@@ -222,24 +247,38 @@ fun WeeklyScheduleScreen(
                                         showWeekSelector = true
                                     }
                                 }
-                                .padding(vertical = 4.dp)
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = displayTitle,
-                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = titleTextColor
                             )
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 imageVector = vectorResource(Res.drawable.arrow_drop_down_24px),
                                 contentDescription = null,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .offset(y = (-4).dp),
+                                modifier = Modifier.size(22.dp),
                                 tint = customSubTextColor
                             )
                         }
                     },
                     actions = {
+                        IconButton(onClick = { onNavigate(Destination.AddEditCourse()) }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.add_24px),
+                                contentDescription = "添加课程",
+                                tint = customTextColor
+                            )
+                        }
+                        IconButton(onClick = { onNavigate(Destination.ThemeSettings) }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.contrast_24px),
+                                contentDescription = "主题与深色模式",
+                                tint = customTextColor
+                            )
+                        }
                         IconButton(onClick = { showTableSwitcher = true }) {
                             Icon(
                                 imageVector = vectorResource(Res.drawable.swap_horiz_24px),
@@ -291,7 +330,7 @@ fun WeeklyScheduleScreen(
                         val d = pageMondayDate.plus(i.toLong(), DateTimeUnit.DAY)
                         val month = d.month.number.toString().padStart(2, '0')
                         val day = d.day.toString().padStart(2, '0')
-                        "$month-$day"
+                        "$month/$day"
                     }
                 }
 
@@ -462,7 +501,8 @@ fun WeeklyScheduleScreen(
                     viewState = gridViewState,
                     actions = gridActions,
                     style = composedStyle,
-                    modifier = Modifier.padding(bottom = systemNavigationBarInset)
+                    modifier = Modifier.padding(bottom = systemNavigationBarInset),
+                    bottomExtraPadding = 96.dp
                 )
             }
         }

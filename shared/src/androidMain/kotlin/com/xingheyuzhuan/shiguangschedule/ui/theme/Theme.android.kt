@@ -1,12 +1,16 @@
 package com.xingheyuzhuan.shiguangschedule.ui.theme
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Build
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -15,6 +19,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.view.WindowCompat
 import com.xingheyuzhuan.shiguangschedule.data.model.AppThemeMode
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 @Composable
 actual fun rememberColorScheme(
@@ -45,9 +55,21 @@ actual fun SetupPlatformThemeEffects(
     themeMode: AppThemeMode
 ) {
     val view = LocalView.current
+
+    LaunchedEffect(themeMode) {
+        val targetNightMode = when (themeMode) {
+            AppThemeMode.FOLLOW_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            AppThemeMode.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            AppThemeMode.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+        }
+        if (AppCompatDelegate.getDefaultNightMode() != targetNightMode) {
+            AppCompatDelegate.setDefaultNightMode(targetNightMode)
+        }
+    }
+
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val window = view.context.findActivity()?.window ?: return@SideEffect
 
             val backgroundColor = colorScheme.background.toArgb()
             window.setBackgroundDrawable(backgroundColor.toDrawable())

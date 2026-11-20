@@ -51,7 +51,8 @@ import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAccountProfile
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtCampusCardInfo
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
-import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormBuilding
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormCampus
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormCatalog
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormPowerInfo
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtExamItem
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
@@ -154,11 +155,24 @@ class CampusDiscoverViewModel(
     fun refreshDormPower() {
         val current = dormPower.value
         if (current.roomId.isBlank() || _isRefreshingPower.value) return
-        val building = CumtDormBuilding.fromId(current.buildingId) ?: CumtDormBuilding.YANMEI
-        val sid = current.studentIdUsed.ifBlank { profile.value.username }
+        val campus = CumtDormCampus.fromId(current.campusId)
+        val building = CumtDormCatalog.resolveBuilding(current.campusId, current.buildingId, current.buildingName)
         viewModelScope.launch {
+            val creds = localRepo.getSavedCredentials()
+            if (creds == null) {
+                ToastManager.show("请先绑定统一身份认证")
+                return@launch
+            }
+            val sid = current.studentIdUsed.ifBlank { creds.first }
             _isRefreshingPower.value = true
-            serviceRepo.queryDormPower(sid, building, current.roomId).fold(
+            serviceRepo.queryDormPower(
+                casUsername = creds.first,
+                casPassword = creds.second,
+                campus = campus,
+                building = building,
+                roomId = current.roomId,
+                queryStudentId = sid
+            ).fold(
                 onSuccess = {
                     localRepo.saveDormPower(it.copy(maxPower = maxOf(current.maxPower, it.remainingPower, 100.0)))
                     ToastManager.show("宿舍电量已更新")
@@ -522,7 +536,7 @@ fun CampusDiscoverScreen(
                                 text = if (dormPower.roomId.isNotBlank()) {
                                     "${dormPower.buildingName} ${dormPower.roomId}"
                                 } else {
-                                    "研梅 / 杏苑 / 松竹 / 桃苑"
+                                    "南湖 / 文昌双校区实时查电"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

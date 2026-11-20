@@ -61,8 +61,14 @@ class WebViewRequestInterceptor {
     fun intercept(request: WebResourceRequest, isDesktopMode: Boolean): WebResourceResponse? {
         val rawUrl = request.url.toString()
 
-        // 1. 基础校验：只在 Desktop 模式且 http/https 请求下工作
+        // 1. 基础校验：只在 Desktop 模式且 http/https 请求下工作；矿大域名放行原生 WebView 网络栈以保障 Cookie/AJAX
         if (!rawUrl.startsWith("http") || !isDesktopMode) return null
+        val host = request.url.host.orEmpty()
+        if (host.equals("cumt.edu.cn", ignoreCase = true) ||
+            host.endsWith(".cumt.edu.cn", ignoreCase = true)
+        ) {
+            return null
+        }
 
         val requestIdHeader = request.requestHeaders["X-WebView-Post-Id"]
         val requestIdParam = request.url.getQueryParameter("_webview_post_id")
@@ -117,8 +123,10 @@ class WebViewRequestInterceptor {
 
                     headers {
                         request.requestHeaders.forEach { (key, value) ->
-                            // 过滤容易被服务端反爬系统标记为移动端 WebView 的 Header
-                            if (!key.equals("X-Requested-With", ignoreCase = true) &&
+                            // 过滤容易被服务端反爬系统标记为移动端 WebView 的 Header，保留标准 XMLHttpRequest 头
+                            val isAppWebViewHeader = key.equals("X-Requested-With", ignoreCase = true) &&
+                                !value.equals("XMLHttpRequest", ignoreCase = true)
+                            if (!isAppWebViewHeader &&
                                 !key.equals("X-WebView-Post-Id", ignoreCase = true)) {
                                 append(key, value)
                             }

@@ -256,15 +256,13 @@ actual fun PlatformWebView(
                 (wv.parent as? ViewGroup)?.removeView(wv)
 
                 wv.clearHistory()
-                wv.clearCache(true)
                 wv.clearFormData()
                 wv.clearSslPreferences()
                 wv.destroy()
             }
 
-            val cookieManager = android.webkit.CookieManager.getInstance()
-            cookieManager.removeAllCookies(null)
-            cookieManager.flush()
+            // 保留已登录会话 Cookie（仅在解绑账号时显式清除），避免反复触发验证码登录
+            android.webkit.CookieManager.getInstance().flush()
 
             androidController?.webViewInstance = null
         }

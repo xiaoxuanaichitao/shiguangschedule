@@ -4,8 +4,10 @@ import com.xingheyuzhuan.shiguangschedule.data.model.CourseImportExport.ImportCo
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import kotlin.math.round
 
 data class MappedExamScheduleSlot(
@@ -176,14 +178,28 @@ object CumtParsers {
 
     fun parseSuggestedTermStartDate(html: String): String? {
         val h6Match = Regex("""<h6\b[^>]*class\s*=\s*["'][^"']*pull-left[^"']*["'][^>]*>(.*?)</h6>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-            .find(html) ?: return null
-        val text = stripHtml(h6Match.groupValues[1])
-        val term = Regex("""学年第\s*(\d+)\s*学期""").find(text)?.groupValues?.get(1) ?: return null
-        val year = Regex("""(\d{4})\s*-""").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: return null
-        return when (term) {
-            "1" -> "$year-09-07"
-            "2" -> "${year + 1}-03-01"
-            else -> "${year + 1}-07-06"
+            .find(html)
+        if (h6Match != null) {
+            val text = stripHtml(h6Match.groupValues[1])
+            val term = Regex("""学年第\s*(\d+)\s*学期""").find(text)?.groupValues?.get(1)
+            val year = Regex("""(\d{4})\s*-""").find(text)?.groupValues?.get(1)?.toIntOrNull()
+            if (term != null && year != null) {
+                return when (term) {
+                    "1" -> "$year-09-07"
+                    "2" -> "${year + 1}-03-01"
+                    else -> "${year + 1}-07-06"
+                }
+            }
+        }
+        val xnm = Regex("""data-cumt-xnm\s*=\s*["'](\d{4})["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        val xqm = Regex("""data-cumt-xqm\s*=\s*["'](\d+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.get(1) ?: return null
+        return when (xqm) {
+            "3" -> "$xnm-09-07"
+            "12" -> "${xnm + 1}-03-01"
+            "16" -> "${xnm + 1}-07-06"
+            else -> null
         }
     }
 
@@ -560,9 +576,16 @@ object CumtParsers {
             val gpa = map["tabGrid_jd"]?.toDoubleOrNull()
             val scoreRaw = map["tabGrid_cj"].orEmpty().trim()
             val examType = map["tabGrid_ksxz"].orEmpty().ifBlank { "正常考试" }
+            val academicYear = map["tabGrid_xnmmc"].orEmpty().trim()
+            val semester = map["tabGrid_xqmmc"].orEmpty().trim()
             if (courseName.isBlank() || scoreRaw.isBlank()) continue
 
-            val id = "$courseName|$credit|$scoreRaw|$examType"
+            val termPrefix = listOf(academicYear, semester).filter { it.isNotBlank() }.joinToString("|")
+            val id = if (termPrefix.isNotEmpty()) {
+                "$termPrefix|$courseName|$credit|$scoreRaw|$examType"
+            } else {
+                "$courseName|$credit|$scoreRaw|$examType"
+            }
             if (dedup.add(id)) {
                 results.add(
                     CumtScoreItem(
@@ -572,7 +595,9 @@ object CumtParsers {
                         gpa = gpa,
                         scoreRaw = scoreRaw,
                         examType = examType,
-                        isIncluded = true
+                        isIncluded = true,
+                        academicYear = academicYear,
+                        semester = semester
                     )
                 )
             }
@@ -672,7 +697,58 @@ object CumtParsers {
         }
     }
 
+    fun extractSynjonesAuthToken(urls: List<String>): String? {
+        val regex = Regex("""[?&]synjones-auth=([^&#]+)""")
+        for (url in urls.asReversed()) {
+            val match = regex.find(url) ?: continue
+            val token = match.groupValues[1].trim()
+            if (token.isNotEmpty()) return token
+        }
+        return null
+    }
+
+    fun resolveDormElecAid(campus: CumtDormCampus, availableAids: List<String>): String {
+        val cleaned = availableAids.map { it.trim() }.filter { it.isNotEmpty() }
+        if (campus.systemAid in cleaned) return campus.systemAid
+        return campus.systemAid.ifBlank { cleaned.firstOrNull().orEmpty() }
+    }
+
+    fun buildDormRoomInfoJson(
+        account: String,
+        aid: String,
+        campus: CumtDormCampus,
+        building: CumtDormBuildingItem,
+        roomId: String
+    ): String {
+        return buildJsonObject {
+            put("query_elec_roominfo", buildJsonObject {
+                put("account", account)
+                put("aid", aid)
+                put("area", buildJsonObject {
+                    put("area", campus.areaId)
+                    put("areaname", campus.areaName)
+                })
+                put("building", buildJsonObject {
+                    put("building", building.name)
+                    put("buildingid", building.id)
+                })
+                put("floor", buildJsonObject {
+                    put("floor", "")
+                    put("floorid", "")
+                })
+                put("room", buildJsonObject {
+                    put("room", roomId)
+                    put("roomid", roomId)
+                })
+            })
+        }.toString()
+    }
+
     fun parseDormPowerMessage(errmsg: String): Double? {
-        return Regex("""([0-9]+\.?[0-9]*)\s*$""").find(errmsg.trim())?.groupValues?.get(1)?.toDoubleOrNull()
+        return Regex("""([0-9]+(?:\.[0-9]+)?)\s*(?:度|kWh)?\s*$""", RegexOption.IGNORE_CASE)
+            .find(errmsg.trim())
+            ?.groupValues
+            ?.get(1)
+            ?.toDoubleOrNull()
     }
 }

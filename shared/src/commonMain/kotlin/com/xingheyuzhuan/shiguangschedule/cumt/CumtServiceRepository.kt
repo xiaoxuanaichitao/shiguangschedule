@@ -79,14 +79,37 @@ class CumtServiceRepository {
         }
     }
 
+    private suspend fun followRedirectsManually(
+        client: HttpClient,
+        startUrl: String,
+        maxHops: Int = 20
+    ): Pair<HttpResponse, List<String>> {
+        val visitedUrls = mutableListOf(startUrl)
+        var currentUrl = startUrl
+        var resp = client.get(currentUrl) {
+            header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
+        }
+        repeat(maxHops) {
+            if (resp.status.value !in 300..399) return resp to visitedUrls
+            val loc = resp.headers[HttpHeaders.Location]?.takeIf { it.isNotBlank() }
+                ?: return resp to visitedUrls
+            currentUrl = resolveRedirectUrl(currentUrl, loc)
+            visitedUrls.add(currentUrl)
+            resp = client.get(currentUrl) {
+                header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
+            }
+        }
+        return resp to visitedUrls
+    }
+
     private suspend fun casAuthenticateAndFollow(
         username: String,
         password: String,
         serviceUrl: String,
-        maxHops: Int = 8
+        maxHops: Int = 20
     ): Result<Pair<List<String>, HttpClient>> = withContext(Dispatchers.IO) {
+        val client = createClient(followRedirects = false)
         runCatching {
-            val client = createClient(followRedirects = false)
             val loginPageUrl = "${CumtConstants.CAS_LOGIN_URL}?service=${serviceUrl.encodeURLParameter()}"
             val pageResp = client.get(loginPageUrl) {
                 header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
@@ -95,15 +118,9 @@ class CumtServiceRepository {
             if (pageResp.status.value in 300..399) {
                 val loc = pageResp.headers[HttpHeaders.Location].orEmpty()
                 if (loc.isNotBlank()) {
-                    val urls = mutableListOf(loc)
-                    var nextUrl = resolveRedirectUrl(loginPageUrl, loc)
-                    repeat(maxHops) {
-                        val r = client.get(nextUrl) { header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA) }
-                        val l = r.headers[HttpHeaders.Location] ?: return@runCatching urls to client
-                        nextUrl = resolveRedirectUrl(nextUrl, l)
-                        urls.add(nextUrl)
-                    }
-                    return@runCatching urls to client
+                    val firstHop = resolveRedirectUrl(loginPageUrl, loc)
+                    val (_, hopUrls) = followRedirectsManually(client, firstHop, maxHops = maxHops)
+                    return@runCatching hopUrls to client
                 }
             }
 
@@ -161,19 +178,11 @@ class CumtServiceRepository {
                 error("当前账号密码过于简单或存在安全提示，请先用浏览器访问统一身份认证平台完成修改")
             }
 
-            val visitedLocations = mutableListOf<String>()
-            var currentUrl = resolveRedirectUrl(loginPageUrl, firstLocation)
-            visitedLocations.add(currentUrl)
-
-            repeat(maxHops) {
-                val hopResp = client.get(currentUrl) {
-                    header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
-                }
-                val hopLoc = hopResp.headers[HttpHeaders.Location] ?: return@runCatching visitedLocations to client
-                currentUrl = resolveRedirectUrl(currentUrl, hopLoc)
-                visitedLocations.add(currentUrl)
-            }
+            val firstHopUrl = resolveRedirectUrl(loginPageUrl, firstLocation)
+            val (_, visitedLocations) = followRedirectsManually(client, firstHopUrl, maxHops = maxHops)
             visitedLocations to client
+        }.onFailure {
+            client.close()
         }
     }
 
@@ -273,25 +282,32 @@ class CumtServiceRepository {
         }
     }
 
+    // ==================== 校园一卡通 & 宿舍电量鉴权 ====================
+
+    private suspend fun authenticateYktSession(username: String, password: String): Pair<String, HttpClient> {
+        val (locations, client) = casAuthenticateAndFollow(
+            username = username,
+            password = password,
+            serviceUrl = CumtConstants.YKT_CAS_LOGIN_URL,
+            maxHops = 20
+        ).getOrThrow()
+
+        val synjonesAuth = CumtParsers.extractSynjonesAuthToken(locations)
+        if (synjonesAuth.isNullOrBlank()) {
+            client.close()
+            error("未能获取一卡通认证令牌 (synjones-auth)")
+        }
+        return synjonesAuth to client
+    }
+
     // ==================== 校园一卡通 ====================
 
     suspend fun fetchCampusCardInfo(username: String, password: String): Result<CumtCampusCardInfo> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val (locations, client) = casAuthenticateAndFollow(
-                    username = username,
-                    password = password,
-                    serviceUrl = "https://yktm.cumt.edu.cn/berserker-auth/cas/login/wisedu?targetUrl=https%3A//yktm.cumt.edu.cn/plat-pc/%3Fname%3DloginTransit"
-                ).getOrThrow()
+                val (synjonesAuth, client) = authenticateYktSession(username, password)
 
                 try {
-                    val authUrl = locations.lastOrNull { it.contains("synjones-auth=") }
-                        ?: locations.lastOrNull()
-                        ?: error("未能获取一卡通认证令牌")
-                    val tokenMatch = Regex("""synjones-auth=([^&#]+)""").find(authUrl)
-                        ?: error("未能从跳转链接解析 synjones-auth 令牌")
-                    val synjonesAuth = tokenMatch.groupValues[1]
-
                     val cardResp = client.get("${CumtConstants.YKT_BASE_URL}/berserker-app/ykt/tsm/getCampusCards?synAccessSource=pc") {
                         header("Synjones-Auth", "bearer $synjonesAuth")
                         header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
@@ -349,108 +365,133 @@ class CumtServiceRepository {
     // ==================== 宿舍电量 ====================
 
     suspend fun queryDormPower(
-        studentId: String,
-        building: CumtDormBuilding,
-        roomId: String
+        casUsername: String,
+        casPassword: String,
+        campus: CumtDormCampus,
+        building: CumtDormBuildingItem,
+        roomId: String,
+        queryStudentId: String = casUsername
     ): Result<CumtDormPowerInfo> = withContext(Dispatchers.IO) {
         runCatching {
-            val cleanStudentId = studentId.trim()
+            val cleanCasUser = casUsername.trim()
+            val targetSno = queryStudentId.trim().ifBlank { cleanCasUser }
             val cleanRoomId = roomId.trim()
-            require(cleanStudentId.isNotEmpty()) { "请先绑定学号或填写查询用学号" }
-            require(cleanRoomId.isNotEmpty()) { "请输入宿舍号" }
+            require(cleanCasUser.isNotEmpty() && casPassword.isNotEmpty()) {
+                "请先在「统一身份认证」绑定矿大账号后再查询宿舍电量"
+            }
+            require(cleanRoomId.isNotEmpty()) { "请输入宿舍号（${campus.roomHint}）" }
 
-            val client = createClient(timeoutMs = 15000L)
+            val (synjonesAuth, client) = authenticateYktSession(cleanCasUser, casPassword)
             try {
-                // Step 1: 学号 -> 一卡通账号 account
+                // Step 1: 打开电费服务应用，激活 yktm web H5 Cookie 会话
+                val appRedirectUrl =
+                    "${CumtConstants.YKT_ELEC_APP_REDIRECT_URL}?type=app&appId=38" +
+                        "&synjones-auth=${synjonesAuth.encodeURLParameter()}" +
+                        "&source=h5&synAccessSource=h5&loginFrom=h5"
+                followRedirectsManually(client, appRedirectUrl, maxHops = 20)
+
+                // Step 2: 查询学号对应的校园卡 account
                 val cardJsonData = buildJsonObject {
                     put("query_card", buildJsonObject {
+                        put("id", targetSno)
                         put("idtype", "sno")
-                        put("id", cleanStudentId)
                     })
                 }.toString()
-                val step1Resp = client.submitForm(
-                    url = "${CumtConstants.YKT_BASE_URL}/web/Common/Tsm.html",
+                val step2Resp = client.submitForm(
+                    url = "${CumtConstants.YKT_BASE_URL}/web/Common/Card.html",
                     formParameters = Parameters.build {
-                        append("jsondata", cardJsonData)
                         append("funname", "synjones.onecard.query.card")
                         append("json", "true")
+                        append("jsondata", cardJsonData)
                     }
                 ) {
                     header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
                 }.bodyAsText()
-                val account = json.parseToJsonElement(step1Resp).jsonObject["query_card"]
-                    ?.jsonObject?.get("card")?.jsonArray
-                    ?.firstOrNull()?.jsonObject?.get("account")?.jsonPrimitive?.contentOrNull
-                    ?: error("未查询到该学号对应的校园卡账户")
 
-                // Step 2: 获取电费应用 aid
+                var account = runCatching {
+                    json.parseToJsonElement(step2Resp).jsonObject["query_card"]
+                        ?.jsonObject?.get("card")?.jsonArray
+                        ?.firstOrNull()?.jsonObject?.get("account")?.jsonPrimitive?.contentOrNull
+                }.getOrNull()?.takeIf { it.isNotBlank() }
+
+                // 若 Card.html 未返回且查询的是本人学号，降级使用 getCampusCards 接口提取 account
+                if (account == null && targetSno == cleanCasUser) {
+                    val cardsResp = client.get("${CumtConstants.YKT_BASE_URL}/berserker-app/ykt/tsm/getCampusCards?synAccessSource=pc") {
+                        header("Synjones-Auth", "bearer $synjonesAuth")
+                        header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
+                    }.bodyAsText()
+                    account = runCatching {
+                        json.parseToJsonElement(cardsResp).jsonObject["data"]
+                            ?.jsonObject?.get("card")?.jsonArray
+                            ?.firstOrNull()?.jsonObject?.get("account")?.jsonPrimitive?.contentOrNull
+                    }.getOrNull()?.takeIf { it.isNotBlank() }
+                }
+                val resolvedAccount = account ?: error("未查询到学号 $targetSno 对应的校园卡账户")
+
+                // Step 3: 获取可用电费应用 aid 列表并匹配校区 systemAid
                 val appJsonData = buildJsonObject {
                     put("query_applist", buildJsonObject {
                         put("apptype", "elec")
                     })
                 }.toString()
-                val step2Resp = client.submitForm(
+                val step3Resp = client.submitForm(
                     url = "${CumtConstants.YKT_BASE_URL}/web/NetWork/AppList.html",
                     formParameters = Parameters.build {
-                        append("jsondata", appJsonData)
                         append("funname", "synjones.onecard.query.applist")
                         append("json", "true")
+                        append("jsondata", appJsonData)
                     }
                 ) {
                     header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
                 }.bodyAsText()
-                val aid = json.parseToJsonElement(step2Resp).jsonObject["query_applist"]
-                    ?.jsonObject?.get("applist")?.jsonArray
-                    ?.firstOrNull()?.jsonObject?.get("aid")?.jsonPrimitive?.contentOrNull
-                    ?: error("未能获取宿舍电量服务 ID")
+                val availableAids = runCatching {
+                    json.parseToJsonElement(step3Resp).jsonObject["query_applist"]
+                        ?.jsonObject?.get("applist")?.jsonArray
+                        ?.mapNotNull { it.jsonObject["aid"]?.jsonPrimitive?.contentOrNull }
+                        .orEmpty()
+                }.getOrDefault(emptyList())
+                val resolvedAid = CumtParsers.resolveDormElecAid(campus, availableAids)
+                if (resolvedAid.isBlank()) {
+                    error("未能获取 ${campus.label} 的电费服务 ID")
+                }
 
-                // Step 3: 查询宿舍剩余电量
-                val roomJsonData = buildJsonObject {
-                    put("query_elec_roominfo", buildJsonObject {
-                        put("aid", aid)
-                        put("account", account)
-                        put("room", buildJsonObject {
-                            put("roomid", cleanRoomId)
-                            put("room", cleanRoomId)
-                        })
-                        put("floor", buildJsonObject {
-                            put("floorid", "")
-                            put("floor", "")
-                        })
-                        put("area", buildJsonObject {
-                            put("area", "1")
-                            put("areaname", "中国矿业大学（南湖校区）")
-                        })
-                        put("building", buildJsonObject {
-                            put("buildingid", building.id)
-                            put("building", building.displayName)
-                        })
-                    })
-                }.toString()
-
-                val step3Resp = client.submitForm(
+                // Step 4: 查询房间剩余电量
+                val roomJsonData = CumtParsers.buildDormRoomInfoJson(
+                    account = resolvedAccount,
+                    aid = resolvedAid,
+                    campus = campus,
+                    building = building,
+                    roomId = cleanRoomId
+                )
+                val step4Resp = client.submitForm(
                     url = "${CumtConstants.YKT_BASE_URL}/web/Common/Tsm.html",
                     formParameters = Parameters.build {
-                        append("jsondata", roomJsonData)
                         append("funname", "synjones.onecard.query.elec.roominfo")
                         append("json", "true")
+                        append("jsondata", roomJsonData)
                     }
                 ) {
                     header(HttpHeaders.UserAgent, CumtConstants.DESKTOP_UA)
                 }.bodyAsText()
 
-                val errmsg = json.parseToJsonElement(step3Resp).jsonObject["query_elec_roominfo"]
+                val errmsg = json.parseToJsonElement(step4Resp).jsonObject["query_elec_roominfo"]
                     ?.jsonObject?.get("errmsg")?.jsonPrimitive?.contentOrNull.orEmpty()
                 val kwh = CumtParsers.parseDormPowerMessage(errmsg)
-                    ?: error(errmsg.ifBlank { "未查询到 ${building.displayName} $cleanRoomId 的电量信息" })
+                    ?: error(
+                        errmsg.ifBlank {
+                            "未查询到 ${campus.label} ${building.name} $cleanRoomId 的电量信息（格式参考：${campus.roomHint}）"
+                        }
+                    )
 
                 CumtDormPowerInfo(
+                    campusId = campus.id,
+                    campusName = campus.label,
                     buildingId = building.id,
-                    buildingName = building.displayName,
+                    buildingName = building.name,
                     roomId = cleanRoomId,
-                    studentIdUsed = cleanStudentId,
-                    account = account,
-                    aid = aid,
+                    studentIdUsed = targetSno,
+                    account = resolvedAccount,
+                    aid = resolvedAid,
                     remainingPower = kwh,
                     maxPower = if (kwh > 100.0) ((kwh / 50.0).toInt() + 1) * 50.0 else 100.0,
                     updatedAtMillis = Clock.System.now().toEpochMilliseconds()

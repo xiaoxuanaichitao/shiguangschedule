@@ -15,13 +15,17 @@ object CumtConstants {
 
     // 教务系统（本科 & 研究生）
     const val JWXT_LOGIN_CHECK_URL = "http://jwxt.cumt.edu.cn/jwglxt/xtgl/login_slogin.html"
+    const val JWXT_HOME_URL = "http://jwxt.cumt.edu.cn/jwglxt/xtgl/index_initMenu.html"
+    const val JWXT_MENU_COURSE = "N2151"
+    const val JWXT_MENU_EXAM = "N358105"
+    const val JWXT_MENU_SCORE = "N305005"
     const val JWXT_SCHEDULE_URL =
-        "http://jwxt.cumt.edu.cn/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=N253508&layout=default"
+        "http://jwxt.cumt.edu.cn/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=$JWXT_MENU_COURSE&layout=default"
     const val YJSXT_HOME_URL = "http://yjsxt.cumt.edu.cn/"
     const val JWXT_EXAM_URL =
-        "http://jwxt.cumt.edu.cn/jwglxt/kwgl/kscx_cxXsksxxIndex.html?gnmkdm=N358105&layout=default"
+        "http://jwxt.cumt.edu.cn/jwglxt/kwgl/kscx_cxXsksxxIndex.html?gnmkdm=$JWXT_MENU_EXAM&layout=default"
     const val JWXT_SCORE_URL =
-        "http://jwxt.cumt.edu.cn/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=N305005&layout=default"
+        "http://jwxt.cumt.edu.cn/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=$JWXT_MENU_SCORE&layout=default"
     const val JWXT_SCORE_DETAIL_URL =
         "http://jwxt.cumt.edu.cn/jwglxt/cjcx/cjcx_cxDgXsxmcj.html?gnmkdm=N305007&layout=default"
 
@@ -33,13 +37,14 @@ object CumtConstants {
 
     // 校园一卡通 & 宿舍电量
     const val YKT_CAS_LOGIN_URL =
-        "https://yktm.cumt.edu.cn/berserker-auth/cas/login/wisedu?targetUrl=https%3A//yktm.cumt.edu.cn/plat-pc/%3Fname%3DloginTransit"
+        "https://yktm.cumt.edu.cn/berserker-auth/cas/login/wisedu?targetUrl=https%3A%2F%2Fyktm.cumt.edu.cn%2Fplat-pc%2F%3Fname%3DloginTransit"
     const val YKT_BASE_URL = "https://yktm.cumt.edu.cn"
-    const val YKT_RECHARGE_URL = "https://yktm.cumt.edu.cn/plat/dating"
+    const val YKT_ELEC_APP_REDIRECT_URL = "https://yktm.cumt.edu.cn/berserker-base/redirect"
+    const val YKT_RECHARGE_URL = "https://yktm.cumt.edu.cn/plat/shouyeUser"
 
     // 校历、校车与 VPN 指南
-    const val SCHOOL_CALENDAR_URL = "https://www.cumt.edu.cn/21738/list.htm"
-    const val SCHOOL_BUS_ANNOUNCEMENT_URL = "https://www.cumt.edu.cn/ggfw/list.htm"
+    const val SCHOOL_CALENDAR_URL = "https://www.cumt.edu.cn/ggfw/xnxl.htm"
+    const val SCHOOL_BUS_ANNOUNCEMENT_URL = "https://www.cumt.edu.cn/ggfw/xcsk.htm"
     const val VPN_GUIDE_WEB_URL = "http://nic.cumt.edu.cn/info/1201/2407.htm"
     const val VPN_GUIDE_CLIENT_URL = "http://nic.cumt.edu.cn/info/1201/2408.htm"
 
@@ -89,7 +94,9 @@ data class CumtScoreItem(
     val gpa: Double? = null,
     val scoreRaw: String,
     val examType: String = "正常考试",
-    val isIncluded: Boolean = true
+    val isIncluded: Boolean = true,
+    val academicYear: String = "",
+    val semester: String = ""
 )
 
 @Serializable
@@ -179,25 +186,120 @@ data class CumtCampusCardInfo(
     val transactions: List<CumtCardTransaction> = emptyList()
 )
 
-enum class CumtDormBuilding(val id: String, val displayName: String) {
-    YANMEI("14", "研梅"),
-    XINGYUAN("13", "杏苑"),
-    SONGZHU("12", "松竹"),
-    TAOYUAN("11", "桃苑");
+enum class CumtDormCampus(
+    val id: String,
+    val label: String,
+    val areaId: String,
+    val areaName: String,
+    val systemAid: String,
+    val systemName: String,
+    val roomHint: String
+) {
+    NANHU(
+        id = "nanhu",
+        label = "南湖校区",
+        areaId = "1",
+        areaName = "中国矿业大学",
+        systemAid = "0030000000002501",
+        systemName = "南湖公寓电费",
+        roomHint = "例如 S3B405、T1203 或 L2-3-501"
+    ),
+    WENCHANG(
+        id = "wenchang",
+        label = "文昌校区",
+        areaId = "22",
+        areaName = "中国矿业大学文昌校区",
+        systemAid = "0030000000002502",
+        systemName = "文昌公寓电费",
+        roomHint = "楼号+房间号，例如 8101"
+    );
 
     companion object {
-        fun fromId(id: String): CumtDormBuilding? = entries.firstOrNull { it.id == id }
+        fun fromId(id: String?): CumtDormCampus =
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: NANHU
+    }
+}
+
+@Serializable
+data class CumtDormBuildingItem(
+    val campusId: String,
+    val id: String,
+    val name: String,
+    val aliases: List<String> = emptyList()
+) {
+    val campus: CumtDormCampus
+        get() = CumtDormCampus.fromId(campusId)
+}
+
+object CumtDormCatalog {
+    val nanhuBuildings: List<CumtDormBuildingItem> = listOf(
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "14", "兰梅", aliases = listOf("研梅")),
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "12", "松竹"),
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "11", "桃苑"),
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "13", "杏苑"),
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "571", "南湖体育馆"),
+        CumtDormBuildingItem(CumtDormCampus.NANHU.id, "614", "用电单位")
+    )
+
+    val wenchangBuildings: List<CumtDormBuildingItem> = listOf(
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "221", "科创10"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "349", "外招3楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "311", "行健楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "354", "学01楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "214", "学02楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "355", "学03楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "189", "学04楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "190", "学05楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "191", "学06楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "192", "学07楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "181", "学08楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "356", "学10楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "318", "学13楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "319", "学14楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "320", "学15楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "321", "学16楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "1", "学17楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "357", "学33楼"),
+        CumtDormBuildingItem(CumtDormCampus.WENCHANG.id, "384", "学34楼")
+    )
+
+    fun buildingsFor(campus: CumtDormCampus): List<CumtDormBuildingItem> = when (campus) {
+        CumtDormCampus.NANHU -> nanhuBuildings
+        CumtDormCampus.WENCHANG -> wenchangBuildings
+    }
+
+    fun defaultBuilding(campus: CumtDormCampus = CumtDormCampus.NANHU): CumtDormBuildingItem =
+        buildingsFor(campus).first()
+
+    fun resolveBuilding(
+        campusId: String?,
+        buildingId: String?,
+        buildingName: String? = null
+    ): CumtDormBuildingItem {
+        val campus = CumtDormCampus.fromId(campusId)
+        val candidates = buildingsFor(campus)
+        if (!buildingId.isNullOrBlank()) {
+            candidates.firstOrNull { it.id == buildingId }?.let { return it }
+        }
+        if (!buildingName.isNullOrBlank()) {
+            candidates.firstOrNull { b ->
+                b.name == buildingName || b.aliases.any { it == buildingName }
+            }?.let { return it }
+        }
+        return defaultBuilding(campus)
     }
 }
 
 @Serializable
 data class CumtDormPowerInfo(
-    val buildingId: String = CumtDormBuilding.YANMEI.id,
-    val buildingName: String = CumtDormBuilding.YANMEI.displayName,
+    val campusId: String = CumtDormCampus.NANHU.id,
+    val campusName: String = CumtDormCampus.NANHU.label,
+    val buildingId: String = CumtDormCatalog.defaultBuilding().id,
+    val buildingName: String = CumtDormCatalog.defaultBuilding().name,
     val roomId: String = "",
     val studentIdUsed: String = "",
     val account: String = "",
-    val aid: String = "",
+    val aid: String = CumtDormCampus.NANHU.systemAid,
     val remainingPower: Double = 0.0,
     val maxPower: Double = 100.0,
     val updatedAtMillis: Long = 0L

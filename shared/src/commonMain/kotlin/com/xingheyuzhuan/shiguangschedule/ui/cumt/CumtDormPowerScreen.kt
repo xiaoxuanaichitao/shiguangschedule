@@ -48,7 +48,9 @@ import androidx.lifecycle.viewModelScope
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAccountProfile
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
-import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormBuilding
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormBuildingItem
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormCampus
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormCatalog
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormPowerInfo
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtServiceRepository
@@ -88,16 +90,33 @@ class CumtDormPowerViewModel(
     private val _isQuerying = MutableStateFlow(false)
     val isQuerying: StateFlow<Boolean> = _isQuerying.asStateFlow()
 
-    fun query(building: CumtDormBuilding, roomId: String, studentIdOverride: String) {
+    fun query(
+        campus: CumtDormCampus,
+        building: CumtDormBuildingItem,
+        roomId: String,
+        studentIdOverride: String
+    ) {
         if (_isQuerying.value) return
-        val sid = studentIdOverride.ifBlank { profile.value.username }.ifBlank { powerInfo.value.studentIdUsed }
         viewModelScope.launch {
+            val creds = localRepo.getSavedCredentials()
+            if (creds == null) {
+                ToastManager.show("请先绑定矿大统一身份认证账号")
+                return@launch
+            }
+            val querySno = studentIdOverride.ifBlank { profile.value.username }.ifBlank { creds.first }
             _isQuerying.value = true
-            serviceRepo.queryDormPower(sid, building, roomId).fold(
+            serviceRepo.queryDormPower(
+                casUsername = creds.first,
+                casPassword = creds.second,
+                campus = campus,
+                building = building,
+                roomId = roomId,
+                queryStudentId = querySno
+            ).fold(
                 onSuccess = { info ->
                     val maxKeep = maxOf(powerInfo.value.maxPower, info.remainingPower, 100.0)
                     localRepo.saveDormPower(info.copy(maxPower = maxKeep))
-                    ToastManager.show("${building.displayName} ${roomId.trim()} 剩余电量 ${formatPower(info.remainingPower)} 度")
+                    ToastManager.show("${campus.label} · ${building.name} ${roomId.trim()} 剩余电量 ${formatPower(info.remainingPower)} 度")
                 },
                 onFailure = { e ->
                     ToastManager.show(e.message ?: "查询宿舍电量失败")
@@ -113,8 +132,9 @@ class CumtDormPowerViewModel(
             ToastManager.show("请先设置并查询宿舍号")
             return
         }
-        val b = CumtDormBuilding.fromId(saved.buildingId) ?: CumtDormBuilding.YANMEI
-        query(b, saved.roomId, saved.studentIdUsed)
+        val campus = CumtDormCampus.fromId(saved.campusId)
+        val building = CumtDormCatalog.resolveBuilding(saved.campusId, saved.buildingId, saved.buildingName)
+        query(campus, building, saved.roomId, saved.studentIdUsed)
     }
 }
 
@@ -135,19 +155,31 @@ fun CumtDormPowerScreen(
     val powerInfo by viewModel.powerInfo.collectAsState()
     val isQuerying by viewModel.isQuerying.collectAsState()
 
-    var selectedBuilding by remember { mutableStateOf(CumtDormBuilding.YANMEI) }
+    var selectedCampus by remember { mutableStateOf(CumtDormCampus.NANHU) }
+    var selectedBuilding by remember { mutableStateOf(CumtDormCatalog.defaultBuilding(CumtDormCampus.NANHU)) }
     var roomId by remember { mutableStateOf("") }
     var studentIdInput by remember { mutableStateOf("") }
+    var syncedRecordKey by remember { mutableStateOf("") }
 
     LaunchedEffect(powerInfo, profile.username) {
-        CumtDormBuilding.fromId(powerInfo.buildingId)?.let { selectedBuilding = it }
-        if (roomId.isEmpty() && powerInfo.roomId.isNotBlank()) roomId = powerInfo.roomId
+        val recordKey = "${powerInfo.campusId}|${powerInfo.buildingId}|${powerInfo.roomId}|${powerInfo.updatedAtMillis}"
+        if (powerInfo.roomId.isNotBlank() && syncedRecordKey != recordKey) {
+            syncedRecordKey = recordKey
+            selectedCampus = CumtDormCampus.fromId(powerInfo.campusId)
+            selectedBuilding = CumtDormCatalog.resolveBuilding(
+                campusId = powerInfo.campusId,
+                buildingId = powerInfo.buildingId,
+                buildingName = powerInfo.buildingName
+            )
+            if (roomId.isEmpty()) roomId = powerInfo.roomId
+        }
         if (studentIdInput.isEmpty()) {
             studentIdInput = powerInfo.studentIdUsed.ifBlank { profile.username }
         }
     }
 
     val isBound = powerInfo.roomId.isNotBlank()
+    val hasCasBinding = profile.username.isNotBlank()
     val isLowPower = isBound && powerInfo.remainingPower < 15.0
     val ratio = if (powerInfo.maxPower > 0.0) {
         (powerInfo.remainingPower / powerInfo.maxPower).toFloat().coerceIn(0f, 1f)
@@ -157,7 +189,11 @@ fun CumtDormPowerScreen(
         topBar = {
             CumtTopBar(
                 title = "宿舍电量",
-                subtitle = if (isBound) "${powerInfo.buildingName} ${powerInfo.roomId}" else "南湖校区实时购电查询",
+                subtitle = if (isBound) {
+                    "${powerInfo.campusName} · ${powerInfo.buildingName} ${powerInfo.roomId}"
+                } else {
+                    "南湖 / 文昌双校区实时购电查询"
+                },
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = viewModel::refreshSaved) {
@@ -180,6 +216,44 @@ fun CumtDormPowerScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Spacer(Modifier.height(2.dp))
+
+            if (!hasCasBinding) {
+                CumtSurfaceCard(
+                    containerColor = CumtAccent.AMBER.containerColor().copy(alpha = 0.72f),
+                    borderColor = CumtAccent.AMBER.contentColor().copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "查询电费需先绑定统一身份认证",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = CumtAccent.AMBER.contentColor()
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "一卡通与宿舍电量接口需使用 CAS 鉴权令牌",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = CumtAccent.AMBER.contentColor().copy(alpha = 0.85f)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Button(
+                            onClick = { onNavigate(Destination.CumtAuth) },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("前往绑定")
+                        }
+                    }
+                }
+            }
 
             // 电量环形仪表盘卡片
             CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
@@ -264,9 +338,9 @@ fun CumtDormPowerScreen(
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = if (isBound) {
-                            "当前监测：${powerInfo.buildingName} ${powerInfo.roomId}"
+                            "当前监测：${powerInfo.campusName} · ${powerInfo.buildingName} ${powerInfo.roomId}"
                         } else {
-                            "在下方选择宿舍楼并输入房间号即可一键绑定"
+                            "在下方切换校区、选择宿舍楼并输入房间号即可绑定"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -302,20 +376,35 @@ fun CumtDormPowerScreen(
                             fontWeight = FontWeight.Bold
                         )
                         CumtStatusPill(
-                            text = "南湖校区",
+                            text = selectedCampus.label,
                             containerColor = CumtAccent.AMBER.containerColor(),
                             contentColor = CumtAccent.AMBER.contentColor()
                         )
                     }
 
+                    val campuses = CumtDormCampus.entries
+                    CumtSegmentedBar(
+                        options = campuses.map { it.label },
+                        selectedIndex = campuses.indexOf(selectedCampus).coerceAtLeast(0),
+                        onSelect = { idx ->
+                            val newCampus = campuses[idx]
+                            if (newCampus != selectedCampus) {
+                                selectedCampus = newCampus
+                                selectedBuilding = CumtDormCatalog.defaultBuilding(newCampus)
+                            }
+                        }
+                    )
+
+                    val campusBuildings = CumtDormCatalog.buildingsFor(selectedCampus)
+                    val columns = if (selectedCampus == CumtDormCampus.NANHU) 3 else 4
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CumtDormBuilding.entries.chunked(4).forEach { rowBuildings ->
+                        campusBuildings.chunked(columns).forEach { rowBuildings ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 rowBuildings.forEach { b ->
-                                    val selected = selectedBuilding == b
+                                    val selected = selectedBuilding.campusId == b.campusId && selectedBuilding.id == b.id
                                     Surface(
                                         onClick = { selectedBuilding = b },
                                         shape = RoundedCornerShape(12.dp),
@@ -330,7 +419,7 @@ fun CumtDormPowerScreen(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text(
-                                            text = b.displayName,
+                                            text = b.name,
                                             style = MaterialTheme.typography.labelLarge,
                                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                             color = if (selected) {
@@ -345,7 +434,7 @@ fun CumtDormPowerScreen(
                                         )
                                     }
                                 }
-                                repeat(4 - rowBuildings.size) {
+                                repeat(columns - rowBuildings.size) {
                                     Spacer(Modifier.weight(1f))
                                 }
                             }
@@ -355,7 +444,7 @@ fun CumtDormPowerScreen(
                     OutlinedTextField(
                         value = roomId,
                         onValueChange = { roomId = it },
-                        label = { Text("宿舍房间号（如 M1A301 / A101）") },
+                        label = { Text("宿舍房间号（${selectedCampus.roomHint}）") },
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -372,8 +461,8 @@ fun CumtDormPowerScreen(
                     )
 
                     Button(
-                        onClick = { viewModel.query(selectedBuilding, roomId, studentIdInput) },
-                        enabled = !isQuerying && roomId.isNotBlank() && studentIdInput.isNotBlank(),
+                        onClick = { viewModel.query(selectedCampus, selectedBuilding, roomId, studentIdInput) },
+                        enabled = !isQuerying && hasCasBinding && roomId.isNotBlank(),
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -388,7 +477,10 @@ fun CumtDormPowerScreen(
                             Spacer(Modifier.width(8.dp))
                             Text("正在查询电量...")
                         } else {
-                            Text("查询并保存宿舍绑定", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (hasCasBinding) "查询并保存宿舍绑定" else "请先绑定统一身份认证",
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }

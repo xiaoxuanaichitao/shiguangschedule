@@ -50,6 +50,7 @@ import com.xingheyuzhuan.shiguangschedule.cumt.CumtAccountProfile
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAuthResult
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtPlatformBridge
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtServiceRepository
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,7 +70,8 @@ import shiguangschedule.shared.generated.resources.school_24px
 @KoinViewModel
 class CumtAuthViewModel(
     private val localRepo: CumtLocalRepository,
-    private val serviceRepo: CumtServiceRepository
+    private val serviceRepo: CumtServiceRepository,
+    private val platformBridge: CumtPlatformBridge
 ) : ViewModel() {
 
     val profile: StateFlow<CumtAccountProfile> = localRepo.profileFlow.stateIn(
@@ -130,6 +132,7 @@ class CumtAuthViewModel(
         viewModelScope.launch {
             serviceRepo.logoutCas()
             localRepo.clearCredentials()
+            platformBridge.clearWebCookies()
             ToastManager.show("已解绑矿大统一身份认证账号")
         }
     }

@@ -346,7 +346,148 @@ class CumtUnitTests {
         assertTrue(jwxtJs.contains("viewport"))
         assertTrue(jwxtJs.contains("cumt-mobile-adapt"))
 
+        val jwxtScoreCss = CumtWebScripts.mobileAdaptationJs("http://jwxt.cumt.edu.cn/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=N305005")
+        assertNotNull(jwxtScoreCss)
+        assertTrue(jwxtScoreCss.contains(".chosen-container"))
+        assertTrue(jwxtScoreCss.contains("select, select.form-control"))
+
         assertNull(CumtWebScripts.mobileAdaptationJs("https://example.com/"))
+    }
+
+    @Test
+    fun dormCatalogCoversDualCampusesAndLegacyAliases() {
+        assertEquals(6, CumtDormCatalog.nanhuBuildings.size)
+        assertEquals(19, CumtDormCatalog.wenchangBuildings.size)
+        assertEquals("1", CumtDormCampus.NANHU.areaId)
+        assertEquals("中国矿业大学", CumtDormCampus.NANHU.areaName)
+        assertEquals("0030000000002501", CumtDormCampus.NANHU.systemAid)
+        assertEquals("22", CumtDormCampus.WENCHANG.areaId)
+        assertEquals("中国矿业大学文昌校区", CumtDormCampus.WENCHANG.areaName)
+        assertEquals("0030000000002502", CumtDormCampus.WENCHANG.systemAid)
+
+        val resolvedLegacy = CumtDormCatalog.resolveBuilding(
+            campusId = "nanhu",
+            buildingId = null,
+            buildingName = "研梅"
+        )
+        assertEquals("14", resolvedLegacy.id)
+        assertEquals("兰梅", resolvedLegacy.name)
+
+        val resolvedWenchang = CumtDormCatalog.resolveBuilding(
+            campusId = "wenchang",
+            buildingId = "311"
+        )
+        assertEquals("行健楼", resolvedWenchang.name)
+    }
+
+    @Test
+    fun dormPowerHelpersExtractTokenResolveAidAndBuildPayload() {
+        val token = CumtParsers.extractSynjonesAuthToken(
+            listOf(
+                "https://authserver.cumt.edu.cn/authserver/login",
+                "https://yktm.cumt.edu.cn/plat-pc/?name=loginTransit&synjones-auth=abc.jwt.token_123"
+            )
+        )
+        assertEquals("abc.jwt.token_123", token)
+        assertNull(CumtParsers.extractSynjonesAuthToken(listOf("https://yktm.cumt.edu.cn/plat/shouyeUser")))
+
+        assertEquals(
+            "0030000000002502",
+            CumtParsers.resolveDormElecAid(CumtDormCampus.WENCHANG, listOf("0030000000002501", "0030000000002502"))
+        )
+        assertEquals(
+            "0030000000002501",
+            CumtParsers.resolveDormElecAid(CumtDormCampus.NANHU, emptyList())
+        )
+
+        val building = CumtDormCatalog.resolveBuilding("nanhu", "14")
+        val payload = CumtParsers.buildDormRoomInfoJson(
+            account = "123456",
+            aid = CumtDormCampus.NANHU.systemAid,
+            campus = CumtDormCampus.NANHU,
+            building = building,
+            roomId = "S3B405"
+        )
+        assertTrue(payload.contains("\"account\":\"123456\""))
+        assertTrue(payload.contains("\"aid\":\"0030000000002501\""))
+        assertTrue(payload.contains("\"areaname\":\"中国矿业大学\""))
+        assertTrue(payload.contains("\"building\":\"兰梅\""))
+        assertTrue(payload.contains("\"buildingid\":\"14\""))
+        assertTrue(payload.contains("\"roomid\":\"S3B405\""))
+
+        assertEquals(42.5, CumtParsers.parseDormPowerMessage("当前剩余电量42.5度"))
+        assertEquals(18.0, CumtParsers.parseDormPowerMessage("Remaining 18 kWh"))
+        assertNull(CumtParsers.parseDormPowerMessage("未查询到该房间信息"))
+    }
+
+    @Test
+    fun parseScoreWithTermFieldsAndSuggestedStartDateFallback() {
+        val scoreHtml = """
+            <table id="tabGrid">
+              <tbody>
+                <tr>
+                  <td aria-describedby="tabGrid_xnmmc">2025-2026</td>
+                  <td aria-describedby="tabGrid_xqmmc">1</td>
+                  <td aria-describedby="tabGrid_kcmc">大学体育</td>
+                  <td aria-describedby="tabGrid_xf">1.0</td>
+                  <td aria-describedby="tabGrid_jd">4.0</td>
+                  <td aria-describedby="tabGrid_cj">92</td>
+                  <td aria-describedby="tabGrid_ksxz">正常考试</td>
+                </tr>
+                <tr>
+                  <td aria-describedby="tabGrid_xnmmc">2025-2026</td>
+                  <td aria-describedby="tabGrid_xqmmc">2</td>
+                  <td aria-describedby="tabGrid_kcmc">大学体育</td>
+                  <td aria-describedby="tabGrid_xf">1.0</td>
+                  <td aria-describedby="tabGrid_jd">4.0</td>
+                  <td aria-describedby="tabGrid_cj">92</td>
+                  <td aria-describedby="tabGrid_ksxz">正常考试</td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+
+        val scores = CumtParsers.parseScoreHtml(scoreHtml)
+        assertEquals(2, scores.size)
+        assertEquals("2025-2026", scores[0].academicYear)
+        assertEquals("1", scores[0].semester)
+        assertEquals("2", scores[1].semester)
+        assertNotEquals(scores[0].id, scores[1].id)
+
+        assertEquals(
+            "2026-03-01",
+            CumtParsers.parseSuggestedTermStartDate("""<div id="cumt-meta" data-cumt-xnm="2025" data-cumt-xqm="12"></div>""")
+        )
+        assertEquals(
+            "2025-09-07",
+            CumtParsers.parseSuggestedTermStartDate("""<div id="cumt-meta" data-cumt-xnm="2025" data-cumt-xqm="3"></div>""")
+        )
+    }
+
+    @Test
+    fun jwxtScriptsAndConstantsMatchUpdatedRules() {
+        assertTrue(CumtConstants.JWXT_SCHEDULE_URL.contains("gnmkdm=N2151"))
+        assertTrue(CumtConstants.YKT_RECHARGE_URL.endsWith("/plat/shouyeUser"))
+
+        val autoNav = CumtWebScripts.jwxtAutoNavigateJs(
+            CumtConstants.JWXT_MENU_SCORE,
+            "/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=N305005&layout=default"
+        )
+        assertTrue(autoNav.contains("N305005"))
+        assertTrue(autoNav.contains("cjcx_cxDgXscj.html"))
+
+        val stateJson = """
+            "{\"hasSelectors\":true,\"years\":[{\"value\":\"\",\"label\":\"全部\",\"selected\":true},{\"value\":\"2025\",\"label\":\"2025-2026\",\"selected\":false}],\"terms\":[{\"value\":\"3\",\"label\":\"1\",\"selected\":false}],\"selectedYear\":\"\",\"selectedTerm\":\"\",\"rowCount\":12,\"currentPage\":1,\"totalPages\":3,\"isLoading\":false,\"hasNextPage\":true}"
+        """.trim()
+        val parsed = CumtWebScripts.parseJwxtTermOptionsState(stateJson)
+        assertTrue(parsed.hasSelectors)
+        assertEquals(2, parsed.years.size)
+        assertEquals("全部", parsed.years[0].label)
+        assertEquals(12, parsed.rowCount)
+        assertEquals(3, parsed.totalPages)
+        assertTrue(parsed.hasNextPage)
+
+        assertEquals(false, CumtWebScripts.parseJwxtTermOptionsState(null).hasSelectors)
     }
 
     @Test

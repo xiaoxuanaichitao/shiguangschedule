@@ -1,6 +1,9 @@
 package com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -8,24 +11,29 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
-import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,7 +45,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,15 +54,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.xingheyuzhuan.shiguangschedule.Destination
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
+import com.xingheyuzhuan.shiguangschedule.cumt.JwxtTermOptionsState
 import com.xingheyuzhuan.shiguangschedule.data.repository.CourseConversionRepository
 import com.xingheyuzhuan.shiguangschedule.ui.components.CourseTablePickerDialog
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.coroutines.resume
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.a11y_back
 import shiguangschedule.shared.generated.resources.a11y_cancel_editing
@@ -69,6 +83,7 @@ import shiguangschedule.shared.generated.resources.action_refresh
 import shiguangschedule.shared.generated.resources.action_switch_to_desktop_mode
 import shiguangschedule.shared.generated.resources.action_switch_to_phone_mode
 import shiguangschedule.shared.generated.resources.arrow_back_24px
+import shiguangschedule.shared.generated.resources.arrow_drop_down_24px
 import shiguangschedule.shared.generated.resources.arrow_forward_24px
 import shiguangschedule.shared.generated.resources.build_24px
 import shiguangschedule.shared.generated.resources.desktop_windows_24px
@@ -134,9 +149,25 @@ fun WebViewScreen(
     var isDevToolsEnabled by remember { mutableStateOf(false) }
     var showCourseTablePicker by remember { mutableStateOf(false) }
 
+    var bkTermState by remember(assetJsPath) { mutableStateOf(JwxtTermOptionsState()) }
+    var bkSelectedYear by remember(assetJsPath) { mutableStateOf("") }
+    var bkSelectedTerm by remember(assetJsPath) { mutableStateOf("") }
+    var showBkYearMenu by remember { mutableStateOf(false) }
+    var showBkTermMenu by remember { mutableStateOf(false) }
+
     val webViewController = rememberWebViewController()
 
     val coroutineScope = rememberCoroutineScope()
+
+    suspend fun evaluateWebJs(script: String): String? = suspendCancellableCoroutine { cont ->
+        var resumed = false
+        webViewController.evaluateJavascript(script) { raw ->
+            if (!resumed && cont.isActive) {
+                resumed = true
+                cont.resume(raw)
+            }
+        }
+    }
     val courseConversionRepository: CourseConversionRepository = koinInject()
     val uiEventChannel = remember { Channel<WebUiEvent>(Channel.UNLIMITED) }
     val uiEventsFlow = remember(uiEventChannel) { uiEventChannel.receiveAsFlow() }
@@ -349,142 +380,285 @@ fun WebViewScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            PlatformWebView(
-                modifier = Modifier.fillMaxSize(),
-                url = currentUrl,
-                isDesktopMode = isDesktopMode,
-                isDevToolsEnabled = isDevToolsEnabled,
-                controller = webViewController,
-                bridgeHandler = bridgeHandler,
-                onProgressChange = { loadingProgress = it },
-                onTitleChange = { pageTitle = it },
-                onNavigateToSchedule = { onNavigate(Destination.CourseSchedule) },
-                onPageLoaded = { loadedUrl ->
-                    CumtWebScripts.mobileAdaptationJs(loadedUrl)?.let { js ->
-                        webViewController.executeScript(js)
-                    }
-                    coroutineScope.launch {
-                        viewModel.getAutoFillScript(loadedUrl)?.let { js ->
-                            webViewController.executeScript(js)
-                        }
-                    }
-                },
-                onSslError = { failingUrl, onProceed, onCancel ->
-                    uiEventChannel.trySend(
-                        WebUiEvent.ShowSslWarning(
-                            SslErrorData(
-                                primaryErrorUrl = failingUrl,
-                                onProceed = onProceed,
-                                onCancel = onCancel
-                            )
-                        )
-                    )
-                }
-            )
+            if (assetJsPath == CumtWebScripts.KEY_BK && bkTermState.hasSelectors) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val yearLabel = bkTermState.years.firstOrNull { it.value == bkSelectedYear }?.label
+                            ?: if (bkSelectedYear.isEmpty()) "学年" else bkSelectedYear
+                        val termLabel = bkTermState.terms.firstOrNull { it.value == bkSelectedTerm }?.label
+                            ?: if (bkSelectedTerm.isEmpty()) "学期" else bkSelectedTerm
 
-            if (loadingProgress < 1.0f) {
-                LinearProgressIndicator(
-                    progress = { loadingProgress },
-                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-
-            if (showCourseTablePicker && assetJsPath != null) {
-                CourseTablePickerDialog(
-                    title = stringResource(Res.string.dialog_title_select_table_for_import),
-                    onDismissRequest = { showCourseTablePicker = false },
-                    onTableSelected = { selectedTable ->
-                        showCourseTablePicker = false
-                        val tableId = selectedTable.id
-
-                        if (assetJsPath == CumtWebScripts.KEY_BK || assetJsPath == CumtWebScripts.KEY_YJS) {
-                            val isYjs = assetJsPath == CumtWebScripts.KEY_YJS
-                            ToastManager.show(toastExecutingImport)
-                            webViewController.evaluateJavascript(CumtWebScripts.extractCourseDomHtmlJs(isYjs)) { raw ->
-                                val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
-                                if (html.isBlank()) {
-                                    ToastManager.show("未读取到页面内容，请先登录后再试")
-                                    return@evaluateJavascript
-                                }
-                                viewModel.importCumtCourses(tableId, isYjs, html) { result ->
-                                    result.fold(
-                                        onSuccess = { (count, suggestedDate) ->
-                                            ToastManager.show("成功导入 $count 门矿大课程")
-                                            if (!suggestedDate.isNullOrBlank()) {
-                                                pendingTermPrompt = tableId to suggestedDate
-                                            } else {
-                                                onNavigate(Destination.CourseSchedule)
-                                            }
-                                        },
-                                        onFailure = { err ->
-                                            ToastManager.show(err.message ?: "导入失败")
+                        Box(modifier = Modifier.weight(1.1f)) {
+                            OutlinedButton(
+                                onClick = { showBkYearMenu = true },
+                                enabled = bkTermState.years.isNotEmpty(),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = yearLabel,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    vectorResource(Res.drawable.arrow_drop_down_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showBkYearMenu,
+                                onDismissRequest = { showBkYearMenu = false }
+                            ) {
+                                bkTermState.years.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = { Text(opt.label.ifBlank { "全部" }) },
+                                        onClick = {
+                                            bkSelectedYear = opt.value
+                                            showBkYearMenu = false
+                                            webViewController.executeScript(
+                                                CumtWebScripts.selectJwxtTermAndQueryJs(opt.value, bkSelectedTerm, triggerSearch = true)
+                                            )
                                         }
                                     )
                                 }
                             }
-                        } else {
-                            try {
-                                val fileSystem = viewModel.fileSystem
-                                val jsFilePath = viewModel.filesDir / "repo" / "schools" / "resources" / assetJsPath
+                        }
 
-                                if (fileSystem.exists(jsFilePath)) {
-                                    val jsCode = fileSystem.read(jsFilePath) { readUtf8() }
-                                    bridgeHandler.setImportTableId(tableId)
-
-                                    val fullJsScript = "window.currentTableId = '$tableId';\n$jsCode"
-                                    webViewController.executeScript(fullJsScript)
-
-                                    ToastManager.show(toastExecutingImport)
-                                } else {
-                                    ToastManager.show(toastImportNotFoundFmt.replace("%s", jsFilePath.toString()))
+                        Box(modifier = Modifier.weight(0.9f)) {
+                            OutlinedButton(
+                                onClick = { showBkTermMenu = true },
+                                enabled = bkTermState.terms.isNotEmpty(),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = termLabel,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    vectorResource(Res.drawable.arrow_drop_down_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showBkTermMenu,
+                                onDismissRequest = { showBkTermMenu = false }
+                            ) {
+                                bkTermState.terms.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = { Text(opt.label.ifBlank { "全部" }) },
+                                        onClick = {
+                                            bkSelectedTerm = opt.value
+                                            showBkTermMenu = false
+                                            webViewController.executeScript(
+                                                CumtWebScripts.selectJwxtTermAndQueryJs(bkSelectedYear, opt.value, triggerSearch = true)
+                                            )
+                                        }
+                                    )
                                 }
-                            } catch (e: Exception) {
-                                ToastManager.show(toastLoadImportFailedFmt.replace("%s", e.message ?: ""))
                             }
                         }
+
+                        FilledTonalButton(
+                            onClick = {
+                                webViewController.executeScript(
+                                    CumtWebScripts.selectJwxtTermAndQueryJs(bkSelectedYear, bkSelectedTerm, triggerSearch = true)
+                                )
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("查询", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
-                )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             }
 
-            pendingTermPrompt?.let { (targetTableId, suggestedDate) ->
-                AlertDialog(
-                    onDismissRequest = {
-                        pendingTermPrompt = null
-                        onNavigate(Destination.CourseSchedule)
-                    },
-                    title = { Text("同步学期开学日期") },
-                    text = {
-                        Text("检测到教务学期对应的参考开学日期为 $suggestedDate，是否同时应用到该课表？（也可稍后在「设置」中调整）")
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                pendingTermPrompt = null
-                                viewModel.applyTermStartDate(targetTableId, suggestedDate) {
-                                    ToastManager.show("已更新开学日期为 $suggestedDate")
-                                    onNavigate(Destination.CourseSchedule)
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                PlatformWebView(
+                    modifier = Modifier.fillMaxSize(),
+                    url = currentUrl,
+                    isDesktopMode = isDesktopMode,
+                    isDevToolsEnabled = isDevToolsEnabled,
+                    controller = webViewController,
+                    bridgeHandler = bridgeHandler,
+                    onProgressChange = { loadingProgress = it },
+                    onTitleChange = { pageTitle = it },
+                    onNavigateToSchedule = { onNavigate(Destination.CourseSchedule) },
+                    onPageLoaded = { loadedUrl ->
+                        CumtWebScripts.mobileAdaptationJs(loadedUrl)?.let { js ->
+                            webViewController.executeScript(js)
+                        }
+                        coroutineScope.launch {
+                            viewModel.getAutoFillScript(loadedUrl)?.let { js ->
+                                webViewController.executeScript(js)
+                            }
+                            if (assetJsPath == CumtWebScripts.KEY_BK) {
+                                if (loadedUrl.contains("jwxt.cumt.edu.cn/jwglxt/xtgl/index", ignoreCase = true)) {
+                                    webViewController.executeScript(
+                                        CumtWebScripts.jwxtAutoNavigateJs(
+                                            CumtConstants.JWXT_MENU_COURSE,
+                                            "/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=${CumtConstants.JWXT_MENU_COURSE}&layout=default"
+                                        )
+                                    )
+                                } else if (loadedUrl.contains("xskbcx_cxXskbcxIndex", ignoreCase = true)) {
+                                    delay(450)
+                                    var inspected = CumtWebScripts.parseJwxtTermOptionsState(
+                                        evaluateWebJs(CumtWebScripts.inspectJwxtPageStateJs())
+                                    )
+                                    if (!inspected.hasSelectors) {
+                                        delay(700)
+                                        inspected = CumtWebScripts.parseJwxtTermOptionsState(
+                                            evaluateWebJs(CumtWebScripts.inspectJwxtPageStateJs())
+                                        )
+                                    }
+                                    if (inspected.hasSelectors) {
+                                        bkTermState = inspected
+                                        bkSelectedYear = inspected.selectedYear
+                                        bkSelectedTerm = inspected.selectedTerm
+                                    }
+                                } else {
+                                    bkTermState = JwxtTermOptionsState()
                                 }
                             }
-                        ) { Text("应用并查看课表") }
+                        }
                     },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                pendingTermPrompt = null
-                                onNavigate(Destination.CourseSchedule)
-                            }
-                        ) { Text("暂不修改") }
+                    onSslError = { failingUrl, onProceed, onCancel ->
+                        uiEventChannel.trySend(
+                            WebUiEvent.ShowSslWarning(
+                                SslErrorData(
+                                    primaryErrorUrl = failingUrl,
+                                    onProceed = onProceed,
+                                    onCancel = onCancel
+                                )
+                            )
+                        )
                     }
                 )
+
+                if (loadingProgress < 1.0f) {
+                    LinearProgressIndicator(
+                        progress = { loadingProgress },
+                        modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent
+                    )
+                }
+
+                if (showCourseTablePicker && assetJsPath != null) {
+                    CourseTablePickerDialog(
+                        title = stringResource(Res.string.dialog_title_select_table_for_import),
+                        onDismissRequest = { showCourseTablePicker = false },
+                        onTableSelected = { selectedTable ->
+                            showCourseTablePicker = false
+                            val tableId = selectedTable.id
+
+                            if (assetJsPath == CumtWebScripts.KEY_BK || assetJsPath == CumtWebScripts.KEY_YJS) {
+                                val isYjs = assetJsPath == CumtWebScripts.KEY_YJS
+                                ToastManager.show(toastExecutingImport)
+                                webViewController.evaluateJavascript(CumtWebScripts.extractCourseDomHtmlJs(isYjs)) { raw ->
+                                    val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
+                                    if (html.isBlank()) {
+                                        ToastManager.show("未读取到页面内容，请先登录后再试")
+                                        return@evaluateJavascript
+                                    }
+                                    viewModel.importCumtCourses(tableId, isYjs, html) { result ->
+                                        result.fold(
+                                            onSuccess = { (count, suggestedDate) ->
+                                                ToastManager.show("成功导入 $count 门矿大课程")
+                                                if (!suggestedDate.isNullOrBlank()) {
+                                                    pendingTermPrompt = tableId to suggestedDate
+                                                } else {
+                                                    onNavigate(Destination.CourseSchedule)
+                                                }
+                                            },
+                                            onFailure = { err ->
+                                                ToastManager.show(err.message ?: "导入失败")
+                                            }
+                                        )
+                                    }
+                                }
+                            } else {
+                                try {
+                                    val fileSystem = viewModel.fileSystem
+                                    val jsFilePath = viewModel.filesDir / "repo" / "schools" / "resources" / assetJsPath
+
+                                    if (fileSystem.exists(jsFilePath)) {
+                                        val jsCode = fileSystem.read(jsFilePath) { readUtf8() }
+                                        bridgeHandler.setImportTableId(tableId)
+
+                                        val fullJsScript = "window.currentTableId = '$tableId';\n$jsCode"
+                                        webViewController.executeScript(fullJsScript)
+
+                                        ToastManager.show(toastExecutingImport)
+                                    } else {
+                                        ToastManager.show(toastImportNotFoundFmt.replace("%s", jsFilePath.toString()))
+                                    }
+                                } catch (e: Exception) {
+                                    ToastManager.show(toastLoadImportFailedFmt.replace("%s", e.message ?: ""))
+                                }
+                            }
+                        }
+                    )
+                }
+
+                pendingTermPrompt?.let { (targetTableId, suggestedDate) ->
+                    AlertDialog(
+                        onDismissRequest = {
+                            pendingTermPrompt = null
+                            onNavigate(Destination.CourseSchedule)
+                        },
+                        title = { Text("同步学期开学日期") },
+                        text = {
+                            Text("检测到教务学期对应的参考开学日期为 $suggestedDate，是否同时应用到该课表？（也可稍后在「设置」中调整）")
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    pendingTermPrompt = null
+                                    viewModel.applyTermStartDate(targetTableId, suggestedDate) {
+                                        ToastManager.show("已更新开学日期为 $suggestedDate")
+                                        onNavigate(Destination.CourseSchedule)
+                                    }
+                                }
+                            ) { Text("应用并查看课表") }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    pendingTermPrompt = null
+                                    onNavigate(Destination.CourseSchedule)
+                                }
+                            ) { Text("暂不修改") }
+                        }
+                    )
+                }
+                WebDialogHost(uiEvents = uiEventsFlow)
             }
-            WebDialogHost(uiEvents = uiEventsFlow)
         }
     }
 }

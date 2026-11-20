@@ -37,7 +37,7 @@ val JS_INTERCEPT_POST = """
             if (this._headers && header) {
                 this._headers[header] = value;
             }
-            if (header && header.toLowerCase() === 'x-requested-with') return;
+            if (header && header.toLowerCase() === 'x-requested-with' && (!value || value.toLowerCase() !== 'xmlhttprequest')) return;
         } catch(e) {
             console.error("XHR setRequestHeader error:", e);
         }

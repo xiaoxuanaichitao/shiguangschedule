@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +19,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -52,6 +59,7 @@ import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtScoreItem
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtWebScripts
+import com.xingheyuzhuan.shiguangschedule.cumt.JwxtTermOptionsState
 import com.xingheyuzhuan.shiguangschedule.data.repository.CourseConversionRepository
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.PlatformBackHandler
@@ -60,15 +68,20 @@ import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.SslErrorData
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebBridgeHandler
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebDialogHost
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebUiEvent
+import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebViewController
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.rememberWebViewController
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.arrow_back_24px
+import shiguangschedule.shared.generated.resources.arrow_drop_down_24px
 import shiguangschedule.shared.generated.resources.close_24px
 import shiguangschedule.shared.generated.resources.delete_24px
 import shiguangschedule.shared.generated.resources.refresh_24px
@@ -114,6 +127,19 @@ class CumtJwxtExtractViewModel(
     }
 }
 
+private suspend fun evaluateJsSuspend(
+    controller: WebViewController,
+    script: String
+): String? = suspendCancellableCoroutine { cont ->
+    var resumed = false
+    controller.evaluateJavascript(script) { raw ->
+        if (!resumed && cont.isActive) {
+            resumed = true
+            cont.resume(raw)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CumtJwxtExtractScreen(
@@ -141,6 +167,20 @@ fun CumtJwxtExtractScreen(
             CumtExtractMode.SCORE -> CumtConstants.JWXT_SCORE_URL
         }
     }
+    val targetMenuCode = remember(mode) {
+        if (mode == CumtExtractMode.EXAM) CumtConstants.JWXT_MENU_EXAM else CumtConstants.JWXT_MENU_SCORE
+    }
+    val targetRelativePath = remember(mode) {
+        if (mode == CumtExtractMode.EXAM) {
+            "/jwglxt/kwgl/kscx_cxXsksxxIndex.html?gnmkdm=${CumtConstants.JWXT_MENU_EXAM}&layout=default"
+        } else {
+            "/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=${CumtConstants.JWXT_MENU_SCORE}&layout=default"
+        }
+    }
+    val targetPathKey = remember(mode) {
+        if (mode == CumtExtractMode.EXAM) "kscx_cxXsksxxIndex" else "cjcx_cxDgXscj"
+    }
+
     var pageTitle by remember {
         mutableStateOf(if (mode == CumtExtractMode.EXAM) "教务考试导入" else "教务成绩导入")
     }
@@ -151,7 +191,175 @@ fun CumtJwxtExtractScreen(
     var showStagedSheet by remember { mutableStateOf(false) }
     var showSyncConfirmDialog by remember { mutableStateOf(false) }
 
+    var termState by remember { mutableStateOf(JwxtTermOptionsState()) }
+    var selectedYear by remember { mutableStateOf("") }
+    var selectedTerm by remember { mutableStateOf("") }
+    var showYearMenu by remember { mutableStateOf(false) }
+    var showTermMenu by remember { mutableStateOf(false) }
+    var isAutoExtracting by remember { mutableStateOf(false) }
+    var autoStatusMessage by remember { mutableStateOf<String?>(null) }
+    var autoQueriedUrl by remember { mutableStateOf("") }
+
     val stagedCount = if (mode == CumtExtractMode.EXAM) stagedExams.size else stagedScores.size
+
+    fun stageHtmlFromCurrentPage(html: String): Pair<Int, Int> {
+        return if (mode == CumtExtractMode.EXAM) {
+            val parsed = CumtParsers.parseExamHtml(html)
+            val existingIds = stagedExams.mapTo(HashSet()) { it.id }
+            val added = parsed.filter { it.id !in existingIds }
+            stagedExams.addAll(added)
+            parsed.size to added.size
+        } else {
+            val parsed = CumtParsers.parseScoreHtml(html)
+            val existingIds = stagedScores.mapTo(HashSet()) { it.id }
+            val added = parsed.filter { it.id !in existingIds }
+            stagedScores.addAll(added)
+            parsed.size to added.size
+        }
+    }
+
+    fun captureCurrentPageOnce() {
+        if (isAutoExtracting) return
+        controller.evaluateJavascript(CumtWebScripts.extractJwxtGridHtmlJs()) { raw ->
+            val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
+            if (html.isBlank()) {
+                ToastManager.show("未读取到网页内容")
+                return@evaluateJavascript
+            }
+            val (parsedCount, addedCount) = stageHtmlFromCurrentPage(html)
+            val unitLabel = if (mode == CumtExtractMode.EXAM) "条考试" else "门成绩"
+            ToastManager.show(
+                if (parsedCount == 0) "当前页未识别到有效记录"
+                else "本页新增 $addedCount $unitLabel，共暂存 $stagedCount 项"
+            )
+        }
+    }
+
+    suspend fun refreshTermSelectors() {
+        val raw = evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+        val state = CumtWebScripts.parseJwxtTermOptionsState(raw)
+        if (state.hasSelectors) {
+            termState = state
+            selectedYear = state.selectedYear
+            selectedTerm = state.selectedTerm
+        }
+    }
+
+    fun startAutoPaginatedExtract() {
+        if (isAutoExtracting) return
+        coroutineScope.launch {
+            isAutoExtracting = true
+            try {
+                autoStatusMessage = "正在检查查询状态..."
+                var state = CumtWebScripts.parseJwxtTermOptionsState(
+                    evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                )
+                if (state.hasSelectors) {
+                    termState = state
+                }
+                if (state.rowCount == 0 && state.hasSelectors) {
+                    autoStatusMessage = "正在执行查询..."
+                    evaluateJsSuspend(
+                        controller,
+                        CumtWebScripts.selectJwxtTermAndQueryJs(selectedYear, selectedTerm, triggerSearch = true)
+                    )
+                    delay(350)
+                    for (attempt in 0 until 40) {
+                        val polled = CumtWebScripts.parseJwxtTermOptionsState(
+                            evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                        )
+                        state = polled
+                        if (!polled.isLoading && (polled.rowCount > 0 || attempt >= 12)) {
+                            break
+                        }
+                        delay(250)
+                    }
+                }
+                if (state.rowCount == 0 && state.totalPages <= 0) {
+                    ToastManager.show("当前查询条件暂无数据，可调整上方学年/学期后再试")
+                    return@launch
+                }
+
+                if (state.currentPage > 1) {
+                    autoStatusMessage = "正在回到第 1 页..."
+                    val firstRes = CumtWebScripts.decodeEvalResult(
+                        evaluateJsSuspend(controller, CumtWebScripts.jwxtPagerActionJs("first"))
+                    )
+                    if (firstRes == "clicked") {
+                        delay(250)
+                        repeat(40) {
+                            val polled = CumtWebScripts.parseJwxtTermOptionsState(
+                                evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                            )
+                            state = polled
+                            if (!polled.isLoading && polled.currentPage == 1) {
+                                return@repeat
+                            }
+                            delay(250)
+                        }
+                    }
+                }
+
+                var totalAdded = 0
+                var fetchedPages = 0
+                for (pageIndex in 0 until 100) {
+                    val pageHint = if (state.totalPages > 0) "${state.currentPage}/${state.totalPages}" else "${state.currentPage}"
+                    autoStatusMessage = "正在抓取第 $pageHint 页..."
+
+                    val gridHtml = CumtWebScripts.decodeEvalResult(
+                        evaluateJsSuspend(controller, CumtWebScripts.extractJwxtGridHtmlJs())
+                    ).orEmpty()
+                    val lastHtmlHash = gridHtml.hashCode()
+                    if (gridHtml.isNotBlank()) {
+                        val (_, addedCount) = stageHtmlFromCurrentPage(gridHtml)
+                        totalAdded += addedCount
+                    }
+                    fetchedPages++
+
+                    if (!state.hasNextPage) break
+                    val prevPage = state.currentPage
+                    val nextClickRes = CumtWebScripts.decodeEvalResult(
+                        evaluateJsSuspend(controller, CumtWebScripts.jwxtPagerActionJs("next"))
+                    )
+                    if (nextClickRes != "clicked") break
+
+                    delay(250)
+                    var advanced = false
+                    for (attempt in 0 until 60) {
+                        val nextState = CumtWebScripts.parseJwxtTermOptionsState(
+                            evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                        )
+                        if (!nextState.isLoading) {
+                            val newGridHash = CumtWebScripts.decodeEvalResult(
+                                evaluateJsSuspend(controller, CumtWebScripts.extractJwxtGridHtmlJs())
+                            ).orEmpty().hashCode()
+                            if (nextState.currentPage != prevPage || newGridHash != lastHtmlHash) {
+                                state = nextState
+                                advanced = true
+                                break
+                            }
+                        }
+                        delay(250)
+                    }
+                    if (!advanced) break
+                }
+
+                val unitLabel = if (mode == CumtExtractMode.EXAM) "条考试" else "门成绩"
+                ToastManager.show(
+                    if (totalAdded > 0) {
+                        "已自动扫描 $fetchedPages 页，新增 $totalAdded $unitLabel（共暂存 $stagedCount 项）"
+                    } else if (stagedCount > 0) {
+                        "已扫描 $fetchedPages 页，共暂存 $stagedCount 项（无新增重复项）"
+                    } else {
+                        "当前查询结果为空，未提取到$unitLabel"
+                    }
+                )
+            } finally {
+                isAutoExtracting = false
+                autoStatusMessage = null
+            }
+        }
+    }
 
     PlatformBackHandler(enabled = true) {
         if (controller.canGoBack()) {
@@ -165,7 +373,11 @@ fun CumtJwxtExtractScreen(
         topBar = {
             CumtTopBar(
                 title = pageTitle,
-                subtitle = "点击「查询」加载后点下方「抓取本页」，多页可翻页累加",
+                subtitle = if (termState.hasSelectors) {
+                    "已识别学年学期 · 可直接点下方「自动抓全页」"
+                } else {
+                    "登录后将自动定位页面并展开原生物理学期选项"
+                },
                 onBack = onBack,
                 navIcon = vectorResource(Res.drawable.close_24px),
                 actions = {
@@ -196,49 +408,34 @@ fun CumtJwxtExtractScreen(
                     OutlinedButton(
                         onClick = { showStagedSheet = true },
                         shape = RoundedCornerShape(50),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.weight(1f)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.weight(0.95f)
                     ) {
-                        Text("已暂存 ($stagedCount)")
+                        Text(
+                            text = "已暂存 ($stagedCount)",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
-                    OutlinedButton(
+                    FilledTonalButton(
+                        enabled = !isAutoExtracting,
                         shape = RoundedCornerShape(50),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        onClick = {
-                            controller.evaluateJavascript(CumtWebScripts.extractJwxtGridHtmlJs()) { raw ->
-                                val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
-                                if (html.isBlank()) {
-                                    ToastManager.show("未读取到网页内容")
-                                    return@evaluateJavascript
-                                }
-                                if (mode == CumtExtractMode.EXAM) {
-                                    val parsed = CumtParsers.parseExamHtml(html)
-                                    val existingIds = stagedExams.map { it.id }.toSet()
-                                    val added = parsed.filter { it.id !in existingIds }
-                                    stagedExams.addAll(added)
-                                    ToastManager.show(
-                                        if (parsed.isEmpty()) "当前页未识别到考试记录"
-                                        else "本页新增 ${added.size} 条，共暂存 ${stagedExams.size} 条"
-                                    )
-                                } else {
-                                    val parsed = CumtParsers.parseScoreHtml(html)
-                                    val existingIds = stagedScores.map { it.id }.toSet()
-                                    val added = parsed.filter { it.id !in existingIds }
-                                    stagedScores.addAll(added)
-                                    ToastManager.show(
-                                        if (parsed.isEmpty()) "当前页未识别到成绩记录"
-                                        else "本页新增 ${added.size} 门，共暂存 ${stagedScores.size} 门"
-                                    )
-                                }
-                            }
-                        }
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.weight(1.1f),
+                        onClick = ::startAutoPaginatedExtract
                     ) {
-                        Text("抓取本页")
+                        if (isAutoExtracting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("抓取中", maxLines = 1)
+                        } else {
+                            Text("自动抓全页", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
 
                     Button(
-                        enabled = stagedCount > 0,
+                        enabled = stagedCount > 0 && !isAutoExtracting,
                         shape = RoundedCornerShape(50),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         onClick = {
@@ -267,16 +464,135 @@ fun CumtJwxtExtractScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = if (mode == CumtExtractMode.EXAM) {
-                        "提示：抓考表支持同时识别座位号与起止时间，导入后可一键同步到课表。"
+                    text = autoStatusMessage ?: if (mode == CumtExtractMode.EXAM) {
+                        "提示：考表支持自动翻页全量抓取（含座位号与起止时间），导入后可同步到课表。"
                     } else {
-                        "提示：建议选择目标学年或「全部」后点查询，若有多页请翻页逐页抓取。"
+                        "提示：选择「全部」学年可直接抓全量成绩；点「自动抓全页」将自动翻页汇总。"
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = CumtAccent.OCEAN.contentColor(),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
+
+            if (termState.hasSelectors) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val yearLabel = termState.years.firstOrNull { it.value == selectedYear }?.label
+                            ?: if (selectedYear.isEmpty()) "全部学年" else selectedYear
+                        val termLabel = termState.terms.firstOrNull { it.value == selectedTerm }?.label
+                            ?: if (selectedTerm.isEmpty()) "全部学期" else selectedTerm
+
+                        Box(modifier = Modifier.weight(1.1f)) {
+                            OutlinedButton(
+                                onClick = { showYearMenu = true },
+                                enabled = !isAutoExtracting && termState.years.isNotEmpty(),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = yearLabel,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    vectorResource(Res.drawable.arrow_drop_down_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showYearMenu,
+                                onDismissRequest = { showYearMenu = false }
+                            ) {
+                                termState.years.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = { Text(opt.label.ifBlank { "全部" }) },
+                                        onClick = {
+                                            selectedYear = opt.value
+                                            showYearMenu = false
+                                            controller.executeScript(
+                                                CumtWebScripts.selectJwxtTermAndQueryJs(opt.value, selectedTerm, triggerSearch = false)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.weight(0.9f)) {
+                            OutlinedButton(
+                                onClick = { showTermMenu = true },
+                                enabled = !isAutoExtracting && termState.terms.isNotEmpty(),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = termLabel,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    vectorResource(Res.drawable.arrow_drop_down_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showTermMenu,
+                                onDismissRequest = { showTermMenu = false }
+                            ) {
+                                termState.terms.forEach { opt ->
+                                    DropdownMenuItem(
+                                        text = { Text(opt.label.ifBlank { "全部" }) },
+                                        onClick = {
+                                            selectedTerm = opt.value
+                                            showTermMenu = false
+                                            controller.executeScript(
+                                                CumtWebScripts.selectJwxtTermAndQueryJs(selectedYear, opt.value, triggerSearch = false)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    controller.executeScript(
+                                        CumtWebScripts.selectJwxtTermAndQueryJs(selectedYear, selectedTerm, triggerSearch = true)
+                                    )
+                                    delay(900)
+                                    refreshTermSelectors()
+                                }
+                            },
+                            enabled = !isAutoExtracting,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("查询", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            }
+
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 PlatformWebView(
                     modifier = Modifier.fillMaxSize(),
@@ -292,6 +608,61 @@ fun CumtJwxtExtractScreen(
                         CumtWebScripts.mobileAdaptationJs(loadedUrl)?.let { controller.executeScript(it) }
                         coroutineScope.launch {
                             viewModel.getAutoFillJs(loadedUrl)?.let { controller.executeScript(it) }
+                            if (loadedUrl.contains("jwxt.cumt.edu.cn/jwglxt/xtgl/index", ignoreCase = true)) {
+                                controller.executeScript(CumtWebScripts.jwxtAutoNavigateJs(targetMenuCode, targetRelativePath))
+                                return@launch
+                            }
+                            if (!loadedUrl.contains(targetPathKey, ignoreCase = true)) {
+                                termState = JwxtTermOptionsState()
+                                return@launch
+                            }
+
+                            delay(450)
+                            var inspected = CumtWebScripts.parseJwxtTermOptionsState(
+                                evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                            )
+                            if (!inspected.hasSelectors) {
+                                delay(700)
+                                inspected = CumtWebScripts.parseJwxtTermOptionsState(
+                                    evaluateJsSuspend(controller, CumtWebScripts.inspectJwxtPageStateJs())
+                                )
+                            }
+                            if (inspected.hasSelectors) {
+                                termState = inspected
+                                selectedYear = inspected.selectedYear
+                                selectedTerm = inspected.selectedTerm
+                                if (autoQueriedUrl != loadedUrl) {
+                                    autoQueriedUrl = loadedUrl
+                                    if (mode == CumtExtractMode.SCORE) {
+                                        val hasAllYear = inspected.years.any { it.value.isEmpty() }
+                                        val targetY = if (hasAllYear) "" else inspected.selectedYear
+                                        val targetT = if (hasAllYear) "" else inspected.selectedTerm
+                                        selectedYear = targetY
+                                        selectedTerm = targetT
+                                        evaluateJsSuspend(
+                                            controller,
+                                            CumtWebScripts.selectJwxtTermAndQueryJs(targetY, targetT, triggerSearch = true)
+                                        )
+                                        delay(900)
+                                        refreshTermSelectors()
+                                    } else {
+                                        val targetY = inspected.selectedYear.ifEmpty {
+                                            inspected.years.firstOrNull { it.value.isNotBlank() }?.value.orEmpty()
+                                        }
+                                        val targetT = inspected.selectedTerm
+                                        selectedYear = targetY
+                                        selectedTerm = targetT
+                                        if (inspected.rowCount == 0) {
+                                            evaluateJsSuspend(
+                                                controller,
+                                                CumtWebScripts.selectJwxtTermAndQueryJs(targetY, targetT, triggerSearch = true)
+                                            )
+                                            delay(900)
+                                            refreshTermSelectors()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     },
                     onSslError = { failingUrl, onProceed, onCancel ->
@@ -306,9 +677,9 @@ fun CumtJwxtExtractScreen(
                         )
                     }
                 )
-                if (progress < 1.0f) {
+                if (progress < 1.0f || isAutoExtracting) {
                     LinearProgressIndicator(
-                        progress = { progress },
+                        progress = { if (isAutoExtracting) 0.5f else progress },
                         modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
                         trackColor = Color.Transparent
                     )
@@ -335,20 +706,30 @@ fun CumtJwxtExtractScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    if (stagedCount > 0) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {
-                                stagedExams.clear()
-                                stagedScores.clear()
+                                showStagedSheet = false
+                                captureCurrentPageOnce()
                             },
+                            enabled = !isAutoExtracting,
                             shape = RoundedCornerShape(50)
-                        ) { Text("清空") }
+                        ) { Text("仅抓本页") }
+                        if (stagedCount > 0) {
+                            OutlinedButton(
+                                onClick = {
+                                    stagedExams.clear()
+                                    stagedScores.clear()
+                                },
+                                shape = RoundedCornerShape(50)
+                            ) { Text("清空") }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 if (stagedCount == 0) {
                     Text(
-                        text = "暂无暂存数据。请在教务表格加载出来后点击底部「抓取本页」。",
+                        text = "暂无暂存数据。可点击底部「自动抓全页」，或先点「查询」再点击上方「仅抓本页」。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 24.dp)

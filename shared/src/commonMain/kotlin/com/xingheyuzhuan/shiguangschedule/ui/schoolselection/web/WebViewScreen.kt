@@ -526,6 +526,7 @@ fun WebViewScreen(
                                         )
                                     )
                                 } else if (loadedUrl.contains("xskbcx_cxXskbcxIndex", ignoreCase = true)) {
+                                    webViewController.executeScript(CumtWebScripts.jwxtCourseAjaxHookJs())
                                     delay(450)
                                     var inspected = CumtWebScripts.parseJwxtTermOptionsState(
                                         evaluateWebJs(CumtWebScripts.inspectJwxtPageStateJs())
@@ -580,25 +581,60 @@ fun WebViewScreen(
                             if (assetJsPath == CumtWebScripts.KEY_BK || assetJsPath == CumtWebScripts.KEY_YJS) {
                                 val isYjs = assetJsPath == CumtWebScripts.KEY_YJS
                                 ToastManager.show(toastExecutingImport)
-                                webViewController.evaluateJavascript(CumtWebScripts.extractCourseDomHtmlJs(isYjs)) { raw ->
-                                    val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
-                                    if (html.isBlank()) {
-                                        ToastManager.show("未读取到页面内容，请先登录后再试")
-                                        return@evaluateJavascript
-                                    }
-                                    viewModel.importCumtCourses(tableId, isYjs, html) { result ->
-                                        result.fold(
-                                            onSuccess = { (count, suggestedDate) ->
-                                                ToastManager.show("成功导入 $count 门矿大课程")
-                                                if (!suggestedDate.isNullOrBlank()) {
-                                                    pendingTermPrompt = tableId to suggestedDate
-                                                } else {
-                                                    onNavigate(Destination.CourseSchedule)
-                                                }
-                                            },
-                                            onFailure = { err ->
-                                                ToastManager.show(err.message ?: "导入失败")
+                                val handleImportResult: (Result<Pair<Int, String?>>) -> Unit = { result ->
+                                    result.fold(
+                                        onSuccess = { (count, suggestedDate) ->
+                                            ToastManager.show("成功导入 $count 门矿大课程")
+                                            if (!suggestedDate.isNullOrBlank()) {
+                                                pendingTermPrompt = tableId to suggestedDate
+                                            } else {
+                                                onNavigate(Destination.CourseSchedule)
                                             }
+                                        },
+                                        onFailure = { err ->
+                                            ToastManager.show(err.message ?: "导入失败")
+                                        }
+                                    )
+                                }
+                                if (isYjs) {
+                                    webViewController.evaluateJavascript(CumtWebScripts.extractCourseDomHtmlJs(true)) { raw ->
+                                        val html = CumtWebScripts.decodeEvalResult(raw).orEmpty()
+                                        if (html.isBlank()) {
+                                            ToastManager.show("未读取到页面内容，请先登录后再试")
+                                            return@evaluateJavascript
+                                        }
+                                        viewModel.importCumtCourses(tableId, true, html, onResult = handleImportResult)
+                                    }
+                                } else {
+                                    coroutineScope.launch {
+                                        evaluateWebJs(CumtWebScripts.fetchBkCourseJsonStartJs())
+                                        var fetchState = CumtWebScripts.parseJwxtBkFetchState(
+                                            evaluateWebJs(CumtWebScripts.readBkCourseJsonResultJs())
+                                        )
+                                        if (!fetchState.done) {
+                                            repeat(20) {
+                                                delay(200)
+                                                fetchState = CumtWebScripts.parseJwxtBkFetchState(
+                                                    evaluateWebJs(CumtWebScripts.readBkCourseJsonResultJs())
+                                                )
+                                                if (fetchState.done) return@repeat
+                                            }
+                                        }
+                                        val html = CumtWebScripts.decodeEvalResult(
+                                            evaluateWebJs(CumtWebScripts.extractCourseDomHtmlJs(false))
+                                        ).orEmpty()
+                                        if (fetchState.json.isBlank() && html.isBlank()) {
+                                            ToastManager.show("未读取到页面内容，请先登录后再试")
+                                            return@launch
+                                        }
+                                        viewModel.importCumtCourses(
+                                            tableId = tableId,
+                                            isYjs = false,
+                                            html = html,
+                                            bkCourseJson = fetchState.json,
+                                            fallbackXnm = fetchState.xnm,
+                                            fallbackXqm = fetchState.xqm,
+                                            onResult = handleImportResult
                                         )
                                     }
                                 }

@@ -26,6 +26,15 @@ data class JwxtTermOptionsState(
     val hasNextPage: Boolean = false
 )
 
+@Serializable
+data class JwxtBkFetchState(
+    val done: Boolean = false,
+    val json: String = "",
+    val xnm: String = "",
+    val xqm: String = "",
+    val error: String = ""
+)
+
 object CumtWebScripts {
     const val KEY_BK = "cumt_bk"
     const val KEY_YJS = "cumt_yjs"
@@ -68,6 +77,132 @@ object CumtWebScripts {
         }.getOrDefault(JwxtTermOptionsState())
     }
 
+    fun parseJwxtBkFetchState(rawEvalResult: String?): JwxtBkFetchState {
+        val decoded = decodeEvalResult(rawEvalResult)?.trim().orEmpty()
+        if (decoded.isEmpty() || !decoded.startsWith("{")) return JwxtBkFetchState(done = true)
+        return runCatching {
+            json.decodeFromString<JwxtBkFetchState>(decoded)
+        }.getOrDefault(JwxtBkFetchState(done = true))
+    }
+
+    fun jwxtCourseAjaxHookJs(): String {
+        return """
+        (function() {
+            try {
+                if (window.__cumtKbHookInstalled) return;
+                var host = (window.location && window.location.host) ? window.location.host : '';
+                if (host.indexOf('jwxt.cumt.edu.cn') === -1) return;
+                window.__cumtKbHookInstalled = true;
+
+                var origOpen = XMLHttpRequest.prototype.open;
+                var origSend = XMLHttpRequest.prototype.send;
+
+                XMLHttpRequest.prototype.open = function(method, url) {
+                    try {
+                        this._cumtUrl = url ? String(url) : '';
+                    } catch (e) {}
+                    return origOpen.apply(this, arguments);
+                };
+
+                XMLHttpRequest.prototype.send = function(body) {
+                    try {
+                        var xhr = this;
+                        var url = xhr._cumtUrl || '';
+                        if (url.indexOf('xskbcx_cxXsgrkb') !== -1) {
+                            xhr._cumtBody = (typeof body === 'string') ? body : '';
+                            xhr.addEventListener('load', function() {
+                                try {
+                                    if (xhr.status >= 200 && xhr.status < 300 && typeof xhr.responseText === 'string' && xhr.responseText.indexOf('kbList') !== -1) {
+                                        var xnmEl = document.getElementById('xnm') || document.querySelector('select[name="xnm"]');
+                                        var xqmEl = document.getElementById('xqm') || document.querySelector('select[name="xqm"]');
+                                        window.__cumtLastKbJson = xhr.responseText;
+                                        window.__cumtLastKbUrl = url;
+                                        window.__cumtLastKbBody = xhr._cumtBody || '';
+                                        window.__cumtLastKbXnm = xnmEl ? (xnmEl.value || '') : '';
+                                        window.__cumtLastKbXqm = xqmEl ? (xqmEl.value || '') : '';
+                                    }
+                                } catch (e) {}
+                            });
+                        }
+                    } catch (e) {}
+                    return origSend.apply(this, arguments);
+                };
+            } catch (e) {}
+        })();
+        """.trimIndent()
+    }
+
+    fun fetchBkCourseJsonStartJs(): String {
+        return """
+        (function() {
+            try {
+                var xnmEl = document.getElementById('xnm') || document.querySelector('select[name="xnm"]');
+                var xqmEl = document.getElementById('xqm') || document.querySelector('select[name="xqm"]');
+                var xnm = xnmEl ? (xnmEl.value || '') : '';
+                var xqm = xqmEl ? (xqmEl.value || '') : '';
+                var cached = window.__cumtLastKbJson || '';
+                if (cached && cached.indexOf('"kbList"') !== -1 &&
+                    (window.__cumtLastKbXnm || '') === xnm &&
+                    (window.__cumtLastKbXqm || '') === xqm) {
+                    window.__cumtKbFetchState = { done: true, json: cached, xnm: xnm, xqm: xqm, error: '' };
+                    return 'cached';
+                }
+
+                var m = window.location && window.location.search ? window.location.search.match(/[?&]gnmkdm=([^&#]+)/) : null;
+                var gnmkdm = m ? decodeURIComponent(m[1]) : 'N2151';
+                var suEl = document.getElementById('sessionUserKey') || document.querySelector('input[name="sessionUserKey"]');
+                var su = suEl ? (suEl.value || '') : '';
+                var url = window.__cumtLastKbUrl || ('/jwglxt/kbcx/xskbcx_cxXsgrkb.html?gnmkdm=' + encodeURIComponent(gnmkdm) + (su ? '&su=' + encodeURIComponent(su) : ''));
+                var body = (window.__cumtLastKbBody && (window.__cumtLastKbXnm || '') === xnm && (window.__cumtLastKbXqm || '') === xqm)
+                    ? window.__cumtLastKbBody
+                    : ('xnm=' + encodeURIComponent(xnm) + '&xqm=' + encodeURIComponent(xqm) + '&kzlx=ck&xsdm=');
+
+                window.__cumtKbFetchState = { done: false, json: '', xnm: xnm, xqm: xqm, error: '' };
+                fetch(url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: body
+                }).then(function(resp) {
+                    return resp.text();
+                }).then(function(text) {
+                    window.__cumtKbFetchState = { done: true, json: text || '', xnm: xnm, xqm: xqm, error: '' };
+                }).catch(function(err) {
+                    window.__cumtKbFetchState = { done: true, json: '', xnm: xnm, xqm: xqm, error: String(err) };
+                });
+                return 'fetching';
+            } catch (e) {
+                window.__cumtKbFetchState = { done: true, json: '', xnm: '', xqm: '', error: String(e) };
+                return 'error';
+            }
+        })();
+        """.trimIndent()
+    }
+
+    fun readBkCourseJsonResultJs(): String {
+        return """
+        (function() {
+            try {
+                if (window.__cumtKbFetchState) {
+                    return JSON.stringify(window.__cumtKbFetchState);
+                }
+                return JSON.stringify({
+                    done: true,
+                    json: window.__cumtLastKbJson || '',
+                    xnm: window.__cumtLastKbXnm || '',
+                    xqm: window.__cumtLastKbXqm || '',
+                    error: ''
+                });
+            } catch (e) {
+                return JSON.stringify({ done: true, json: '', xnm: '', xqm: '', error: String(e) });
+            }
+        })();
+        """.trimIndent()
+    }
+
     fun extractCourseDomHtmlJs(isYjs: Boolean): String {
         return if (isYjs) {
             """
@@ -99,9 +234,17 @@ object CumtWebScripts {
                     var xqmEl = document.getElementById('xqm') || document.querySelector('select[name="xqm"]');
                     var meta = '<div id="cumt-meta" data-cumt-xnm="' + (xnmEl ? (xnmEl.value || '') : '') + '" data-cumt-xqm="' + (xqmEl ? (xqmEl.value || '') : '') + '"></div>';
                     var header = document.querySelector('h6.pull-left');
-                    var table = document.getElementById('kbgrid_table_0') || document.getElementById('kblist_table');
-                    if (table) {
-                        return meta + (header ? header.outerHTML : '') + table.outerHTML;
+                    var parts = [];
+                    var grids = document.querySelectorAll('table[id^="kbgrid_table_"]');
+                    for (var i = 0; i < grids.length; i++) {
+                        parts.push(grids[i].outerHTML);
+                    }
+                    var listTable = document.getElementById('kblist_table');
+                    if (listTable) {
+                        parts.push(listTable.outerHTML);
+                    }
+                    if (parts.length > 0) {
+                        return meta + (header ? header.outerHTML : '') + parts.join('');
                     }
                 } catch (e) {}
                 return document.documentElement ? document.documentElement.outerHTML : '';

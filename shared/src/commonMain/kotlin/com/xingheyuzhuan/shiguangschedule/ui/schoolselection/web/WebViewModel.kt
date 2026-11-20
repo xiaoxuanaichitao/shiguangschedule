@@ -51,6 +51,9 @@ class WebViewModel(
         tableId: String,
         isYjs: Boolean,
         html: String,
+        bkCourseJson: String? = null,
+        fallbackXnm: String = "",
+        fallbackXqm: String = "",
         onResult: (Result<Pair<Int, String?>>) -> Unit
     ) {
         viewModelScope.launch {
@@ -58,8 +61,15 @@ class WebViewModel(
                 val (courses, suggestedDate) = if (isYjs) {
                     CumtParsers.parseYjsCourseHtml(html) to null
                 } else {
-                    val res = CumtParsers.parseBkCourseHtml(html)
-                    res.courses to res.suggestedTermStartDate
+                    val jsonRes = bkCourseJson?.takeIf { it.isNotBlank() }?.let { rawJson ->
+                        CumtParsers.parseBkCourseJson(rawJson, fallbackXnm, fallbackXqm)
+                    }
+                    if (jsonRes != null && jsonRes.courses.isNotEmpty()) {
+                        jsonRes.courses to (jsonRes.suggestedTermStartDate ?: CumtParsers.parseSuggestedTermStartDate(html))
+                    } else {
+                        val htmlRes = CumtParsers.parseBkCourseHtml(html)
+                        htmlRes.courses to (htmlRes.suggestedTermStartDate ?: jsonRes?.suggestedTermStartDate)
+                    }
                 }
                 if (courses.isEmpty()) {
                     error("当前页面未检测到课表数据，请确认已查询并显示课表后再试")

@@ -491,6 +491,193 @@ class CumtUnitTests {
     }
 
     @Test
+    fun parseBkCourseJsonHandlesFullPayloadAndFallback() {
+        val sampleJson = """
+            {
+              "xsxx": {
+                "XNMC": "2026-2027",
+                "XQMMC": "1"
+              },
+              "kbList": [
+                {
+                  "kcmc": "数据结构与算法",
+                  "xm": "李老师",
+                  "xqmc": "南湖校区",
+                  "cdmc": "博4-A201",
+                  "xqj": "1",
+                  "jcs": "1-3,5-6",
+                  "zcd": "1-12周(单),14周",
+                  "xf": "4.0"
+                },
+                {
+                  "kcmc": "自动控制原理",
+                  "xm": "王老师",
+                  "xqmc": "南湖校区",
+                  "cdmc": "南湖校区 博5-B101",
+                  "xqj": "二",
+                  "jcor": "3-4节",
+                  "zcd": "2-16周(双)",
+                  "xf": "3.5"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val result = CumtParsers.parseBkCourseJson(sampleJson)
+        assertEquals("2026-09-07", result.suggestedTermStartDate)
+        assertEquals(3, result.courses.size)
+
+        val ds1 = result.courses.first { it.name == "数据结构与算法" && it.startSection == 1 }
+        assertEquals(1, ds1.day)
+        assertEquals(3, ds1.endSection)
+        assertEquals("南湖校区 博4-A201", ds1.position)
+        assertEquals("李老师", ds1.teacher)
+        assertEquals(4.0f, ds1.credit)
+        assertEquals(listOf(1, 3, 5, 7, 9, 11, 14), ds1.weeks)
+
+        val autoCtrl = result.courses.first { it.name == "自动控制原理" }
+        assertEquals(2, autoCtrl.day)
+        assertEquals(3, autoCtrl.startSection)
+        assertEquals(4, autoCtrl.endSection)
+        // cdmc 已包含 xqmc 时不重复拼接
+        assertEquals("南湖校区 博5-B101", autoCtrl.position)
+        assertEquals(listOf(2, 4, 6, 8, 10, 12, 14, 16), autoCtrl.weeks)
+
+        val fallbackDateRes = CumtParsers.parseBkCourseJson("""{"kbList":[]}""", fallbackXnm = "2026", fallbackXqm = "12")
+        assertTrue(fallbackDateRes.courses.isEmpty())
+        assertEquals("2027-03-01", fallbackDateRes.suggestedTermStartDate)
+
+        val malformed = CumtParsers.parseBkCourseJson("not-json")
+        assertTrue(malformed.courses.isEmpty())
+        assertNull(malformed.suggestedTermStartDate)
+    }
+
+    @Test
+    fun parseBkCourseHtmlHandlesEdgeCasesAndListFallback() {
+        // 1. 蓝色 <font>/<a> 无 class="title"，全角括号，周次前置，缺失“节/周”按周次+rowspan 回退，以及 kbgrid_table_1
+        val edgeGridHtml = """
+            <div id="cumt-meta" data-cumt-xnm="2026" data-cumt-xqm="3"></div>
+            <table id="kbgrid_table_0">
+              <tr>
+                <td id="1-1" rowspan="2">
+                  <div class="wrapper">
+                    <div class="timetable_con">
+                      <font color="blue">数据结构A</font>
+                      <p><span title="节/周"></span>（1-2节）1-16周</p>
+                      <p><span title="地点"></span>地点：博学楼B101</p>
+                      <p><span title="授课教师"></span>教师：张老师</p>
+                    </div>
+                    <div class="timetable_con">
+                      <a href="javascript:void(0)">离散数学</a>
+                      <p><span title="周数"></span>5-12周(单)</p>
+                      <p><span class="glyphicon glyphicon-user"></span>陈老师</p>
+                    </div>
+                  </div>
+                </td>
+                <td id="2-3" rowspan="2">
+                  <div class="timetable_con">
+                    <span class="title">大学英语</span>
+                    <p><span title="节/周"></span>1-8周(3-4节)</p>
+                    <p><span class="glyphicon glyphicon-map-marker"></span>教一102</p>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <table id="kbgrid_table_1">
+              <tr>
+                <td id="4-9" rowspan="2">
+                  <div class="timetable_con">
+                    <span class="title">科研素养</span>
+                    <p>1-4周</p>
+                  </div>
+                </td>
+              </tr>
+            </table>
+        """.trimIndent()
+
+        val gridRes = CumtParsers.parseBkCourseHtml(edgeGridHtml)
+        assertEquals("2026-09-07", gridRes.suggestedTermStartDate)
+        assertEquals(4, gridRes.courses.size)
+
+        val ds = gridRes.courses.first { it.name == "数据结构A" }
+        assertEquals("博学楼B101", ds.position)
+        assertEquals("张老师", ds.teacher)
+        assertEquals(1, ds.startSection)
+        assertEquals(2, ds.endSection)
+
+        val discrete = gridRes.courses.first { it.name == "离散数学" }
+        assertEquals(1, discrete.day)
+        assertEquals(1, discrete.startSection)
+        assertEquals(2, discrete.endSection)
+        assertEquals("陈老师", discrete.teacher)
+        assertEquals(listOf(5, 7, 9, 11), discrete.weeks)
+
+        val eng = gridRes.courses.first { it.name == "大学英语" }
+        assertEquals(2, eng.day)
+        assertEquals(3, eng.startSection)
+        assertEquals(4, eng.endSection)
+        assertEquals("教一102", eng.position)
+        assertEquals((1..8).toList(), eng.weeks)
+
+        val extraTable = gridRes.courses.first { it.name == "科研素养" }
+        assertEquals(4, extraTable.day)
+        assertEquals(9, extraTable.startSection)
+        assertEquals(10, extraTable.endSection)
+
+        // 2. 列表视图 (#kblist_table) 回退解析
+        val listOnlyHtml = """
+            <table id="kblist_table">
+              <tr>
+                <td id="xq_1" rowspan="2">星期一</td>
+                <td id="jc_1-5-6">5-6节</td>
+                <td>
+                  <div class="timetable_con">
+                    <span class="title">计算机网络</span>
+                    <p><span title="周次"></span>周次：1-10周</p>
+                    <p><span title="上课地点"></span>计1-202</p>
+                    <p><span title="教师"></span>刘老师</p>
+                  </div>
+                </td>
+              </tr>
+            </table>
+        """.trimIndent()
+
+        val listRes = CumtParsers.parseBkCourseHtml(listOnlyHtml)
+        assertEquals(1, listRes.courses.size)
+        assertEquals("计算机网络", listRes.courses[0].name)
+        assertEquals(1, listRes.courses[0].day)
+        assertEquals(5, listRes.courses[0].startSection)
+        assertEquals(6, listRes.courses[0].endSection)
+        assertEquals("计1-202", listRes.courses[0].position)
+        assertEquals("刘老师", listRes.courses[0].teacher)
+        assertEquals((1..10).toList(), listRes.courses[0].weeks)
+    }
+
+    @Test
+    fun bkCourseScriptsAndFetchStateParseCorrectly() {
+        val hookJs = CumtWebScripts.jwxtCourseAjaxHookJs()
+        assertTrue(hookJs.contains("xskbcx_cxXsgrkb"))
+        assertTrue(hookJs.contains("__cumtLastKbJson"))
+
+        val fetchStartJs = CumtWebScripts.fetchBkCourseJsonStartJs()
+        assertTrue(fetchStartJs.contains("xskbcx_cxXsgrkb.html"))
+        assertTrue(fetchStartJs.contains("__cumtKbFetchState"))
+
+        val domJs = CumtWebScripts.extractCourseDomHtmlJs(false)
+        assertTrue(domJs.contains("table[id^=\"kbgrid_table_\"]"))
+        assertTrue(domJs.contains("kblist_table"))
+
+        val stateJson = """
+            "{\"done\":true,\"json\":\"{\\\"kbList\\\":[]}\",\"xnm\":\"2026\",\"xqm\":\"3\",\"error\":\"\"}"
+        """.trim()
+        val state = CumtWebScripts.parseJwxtBkFetchState(stateJson)
+        assertTrue(state.done)
+        assertEquals("2026", state.xnm)
+        assertEquals("3", state.xqm)
+        assertTrue(state.json.contains("kbList"))
+    }
+
+    @Test
     fun scheduleGridStyleDefaultMatchesRedesignedDefaults() {
         val style = ScheduleGridStyle.DEFAULT
         assertEquals(12, style.courseColorMaps.size)

@@ -5,6 +5,8 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.isoDayNumber
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -29,6 +31,13 @@ data class CasLoginInputs(
 
 private data class HtmlElementMatch(
     val openTagAttrs: String,
+    val innerHtml: String
+)
+
+private data class BkTdCell(
+    val day: Int,
+    val startSection: Int,
+    val rowspan: Int,
     val innerHtml: String
 )
 
@@ -128,6 +137,55 @@ object CumtParsers {
         return result
     }
 
+    /**
+     * 按起始标签正则与同标签嵌套深度提取元素，适用于含 class/id 过滤且可能存在包裹容器的 HTML 结构。
+     */
+    private fun extractMatchingElementsByOpenPattern(
+        html: String,
+        tagName: String,
+        openPattern: Regex
+    ): List<HtmlElementMatch> {
+        val anyTagPattern = Regex("""<(/?)$tagName\b([^>]*)>""", RegexOption.IGNORE_CASE)
+        val result = mutableListOf<HtmlElementMatch>()
+        var searchFrom = 0
+        while (searchFrom < html.length) {
+            val openMatch = openPattern.find(html, searchFrom) ?: break
+            val openAttrs = if (openMatch.groupValues.size > 1) openMatch.groupValues[1] else ""
+            val openEnd = openMatch.range.last + 1
+            if (openMatch.value.endsWith("/>")) {
+                result.add(HtmlElementMatch(openAttrs, ""))
+                searchFrom = openEnd
+                continue
+            }
+            var depth = 1
+            var pos = openEnd
+            var closeStart = -1
+            var closeEnd = -1
+            while (pos < html.length) {
+                val next = anyTagPattern.find(html, pos) ?: break
+                val isClosing = next.groupValues[1] == "/"
+                if (!isClosing && !next.value.endsWith("/>")) {
+                    depth++
+                } else if (isClosing) {
+                    depth--
+                    if (depth == 0) {
+                        closeStart = next.range.first
+                        closeEnd = next.range.last + 1
+                        break
+                    }
+                }
+                pos = next.range.last + 1
+            }
+            if (closeStart >= 0) {
+                result.add(HtmlElementMatch(openAttrs, html.substring(openEnd, closeStart)))
+                searchFrom = closeEnd
+            } else {
+                break
+            }
+        }
+        return result
+    }
+
     // ==================== CAS 解析 ====================
 
     fun parseCasLoginInputs(html: String): CasLoginInputs? {
@@ -176,6 +234,50 @@ object CumtParsers {
 
     // ==================== 本科课表解析（正方教务）====================
 
+    private fun mapTermCodeToStartDate(year: Int, termCode: String): String {
+        return when (termCode.trim()) {
+            "1", "3" -> "$year-09-07"
+            "2", "12" -> "${year + 1}-03-01"
+            else -> "${year + 1}-07-06"
+        }
+    }
+
+    private fun parseDayOfWeekToken(raw: String): Int? {
+        val trimmed = raw.trim()
+        trimmed.toIntOrNull()?.takeIf { it in 1..7 }?.let { return it }
+        return when {
+            trimmed.contains("一") -> 1
+            trimmed.contains("二") -> 2
+            trimmed.contains("三") -> 3
+            trimmed.contains("四") -> 4
+            trimmed.contains("五") -> 5
+            trimmed.contains("六") -> 6
+            trimmed.contains("日") || trimmed.contains("天") -> 7
+            else -> null
+        }
+    }
+
+    private fun parseSectionRanges(sectionsText: String): List<Pair<Int, Int>> {
+        val normalized = sectionsText
+            .replace("—", "-")
+            .replace("–", "-")
+            .replace("~", "-")
+            .replace("至", "-")
+            .replace("，", ",")
+            .replace("、", ",")
+        return normalized.split(",")
+            .mapNotNull { token ->
+                val nums = Regex("""(\d+)(?:\s*-\s*(\d+))?""").find(token.trim()) ?: return@mapNotNull null
+                val start = nums.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+                val end = nums.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: start
+                if (start <= 0 || end <= 0) return@mapNotNull null
+                if (start <= end) start to end else end to start
+            }
+    }
+
+    private fun bkCourseDedupKey(item: ImportCourseJsonModel): String =
+        "${item.day}|${item.name}|${item.startSection}|${item.endSection}|${item.weeks.sorted().joinToString(",")}|${item.position}|${item.teacher}"
+
     fun parseSuggestedTermStartDate(html: String): String? {
         val h6Match = Regex("""<h6\b[^>]*class\s*=\s*["'][^"']*pull-left[^"']*["'][^>]*>(.*?)</h6>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
             .find(html)
@@ -184,11 +286,7 @@ object CumtParsers {
             val term = Regex("""学年第\s*(\d+)\s*学期""").find(text)?.groupValues?.get(1)
             val year = Regex("""(\d{4})\s*-""").find(text)?.groupValues?.get(1)?.toIntOrNull()
             if (term != null && year != null) {
-                return when (term) {
-                    "1" -> "$year-09-07"
-                    "2" -> "${year + 1}-03-01"
-                    else -> "${year + 1}-07-06"
-                }
+                return mapTermCodeToStartDate(year, term)
             }
         }
         val xnm = Regex("""data-cumt-xnm\s*=\s*["'](\d{4})["']""", RegexOption.IGNORE_CASE)
@@ -196,57 +294,216 @@ object CumtParsers {
         val xqm = Regex("""data-cumt-xqm\s*=\s*["'](\d+)["']""", RegexOption.IGNORE_CASE)
             .find(html)?.groupValues?.get(1) ?: return null
         return when (xqm) {
-            "3" -> "$xnm-09-07"
-            "12" -> "${xnm + 1}-03-01"
-            "16" -> "${xnm + 1}-07-06"
+            "3", "12", "16" -> mapTermCodeToStartDate(xnm, xqm)
             else -> null
         }
     }
 
-    fun parseBkCourseHtml(html: String): ParsedBkScheduleResult {
-        val suggestedDate = parseSuggestedTermStartDate(html)
-        val tableMatch = Regex("""<table\b[^>]*id\s*=\s*["']kbgrid_table_0["'][^>]*>""", RegexOption.IGNORE_CASE)
-            .find(html)
-        val searchScope = if (tableMatch != null) {
-            val start = tableMatch.range.first
-            val tables = extractTopLevelElements(html.substring(start), "table")
-            tables.firstOrNull()?.innerHtml ?: html
-        } else {
-            html
+    /**
+     * 第一层：直接解析正方教务 `xskbcx_cxXsgrkb.html` 返回的 `kbList` JSON，
+     * 免疫不同账号个性化显示设置（齿轮隐藏字段）和表格视图切换差异。
+     */
+    fun parseBkCourseJson(
+        rawJson: String,
+        fallbackXnm: String = "",
+        fallbackXqm: String = ""
+    ): ParsedBkScheduleResult {
+        val trimmed = rawJson.trim()
+        if (trimmed.isEmpty() || !trimmed.startsWith("{")) {
+            return ParsedBkScheduleResult(emptyList(), null)
         }
+        val root = runCatching { lenientJson.parseToJsonElement(trimmed).jsonObject }.getOrNull()
+            ?: return ParsedBkScheduleResult(emptyList(), null)
 
-        val tdRegex = Regex("""<td\b([^>]*\bid\s*=\s*["']([1-7])-(\d+)["'][^>]*)>""", RegexOption.IGNORE_CASE)
-        val allTds = extractAllMatchingTds(searchScope, tdRegex)
+        val xsxx = runCatching { root["xsxx"]?.jsonObject }.getOrNull()
+        val xnmYearFromXsxx = xsxx?.get("XNMC")?.jsonPrimitive?.contentOrNull
+            ?.let { Regex("""(\d{4})""").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+            ?: xsxx?.get("XNM")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+        val xqmFromXsxx = xsxx?.get("XQMMC")?.jsonPrimitive?.contentOrNull
+            ?: xsxx?.get("XQM")?.jsonPrimitive?.contentOrNull
+
+        val effectiveYear = xnmYearFromXsxx ?: Regex("""(\d{4})""").find(fallbackXnm)?.groupValues?.get(1)?.toIntOrNull()
+        val effectiveTerm = xqmFromXsxx?.takeIf { it.isNotBlank() } ?: fallbackXqm.trim()
+        val suggestedDate = if (effectiveYear != null && effectiveTerm.isNotBlank()) {
+            mapTermCodeToStartDate(effectiveYear, effectiveTerm)
+        } else null
+
+        val kbList = runCatching { root["kbList"]?.jsonArray }.getOrNull()
+            ?: return ParsedBkScheduleResult(emptyList(), suggestedDate)
 
         val courses = mutableListOf<ImportCourseJsonModel>()
         val dedup = HashSet<String>()
 
-        for ((dayOfWeek, innerHtml) in allTds) {
-            val blocks = extractTopLevelElements(innerHtml, "div")
-                .ifEmpty { listOf(HtmlElementMatch("", innerHtml)) }
-            for (block in blocks) {
-                val parsed = parseBkSingleBlock(dayOfWeek, block.innerHtml)
-                for (item in parsed) {
-                    val key = "${item.day}|${item.name}|${item.startSection}|${item.endSection}|${item.weeks.sorted().joinToString(",")}|${item.position}|${item.teacher}"
-                    if (dedup.add(key)) {
-                        courses.add(item)
-                    }
+        for (el in kbList) {
+            val obj = runCatching { el.jsonObject }.getOrNull() ?: continue
+            val name = obj["kcmc"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (name.isBlank()) continue
+
+            val day = obj["xqj"]?.jsonPrimitive?.contentOrNull?.let(::parseDayOfWeekToken) ?: continue
+            val weeks = parseWeekTokens(obj["zcd"]?.jsonPrimitive?.contentOrNull.orEmpty())
+            if (weeks.isEmpty()) continue
+
+            val sectionText = listOf("jcs", "jcor", "jc")
+                .firstNotNullOfOrNull { key ->
+                    obj[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+                }
+                .orEmpty()
+            val sectionRanges = parseSectionRanges(sectionText)
+            if (sectionRanges.isEmpty()) continue
+
+            val teacher = obj["xm"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val campus = obj["xqmc"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val room = obj["cdmc"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val position = if (campus.isNotBlank() && room.isNotBlank() && !room.contains(campus)) {
+                "$campus $room"
+            } else {
+                room.ifBlank { campus }
+            }
+            val credit = obj["xf"]?.jsonPrimitive?.contentOrNull
+                ?.replace(Regex("[^0-9.]"), "")
+                ?.toFloatOrNull()
+
+            for ((startSec, endSec) in sectionRanges) {
+                val item = ImportCourseJsonModel(
+                    name = name,
+                    teacher = teacher,
+                    position = position,
+                    day = day,
+                    startSection = startSec,
+                    endSection = endSec,
+                    weeks = weeks,
+                    isCustomTime = false,
+                    credit = credit
+                )
+                if (dedup.add(bkCourseDedupKey(item))) {
+                    courses.add(item)
                 }
             }
         }
         return ParsedBkScheduleResult(courses = courses, suggestedTermStartDate = suggestedDate)
     }
 
+    fun parseBkCourseHtml(html: String): ParsedBkScheduleResult {
+        val suggestedDate = parseSuggestedTermStartDate(html)
+        val gridTableOpenRegex = Regex("""<table\b([^>]*\bid\s*=\s*["']kbgrid_table_\d+["'][^>]*)>""", RegexOption.IGNORE_CASE)
+        val gridTables = extractMatchingElementsByOpenPattern(html, "table", gridTableOpenRegex)
+        val searchScopes = if (gridTables.isNotEmpty()) {
+            gridTables.map { it.innerHtml }
+        } else {
+            listOf(html)
+        }
+
+        val tdRegex = Regex("""<td\b([^>]*\bid\s*=\s*["']([1-7])-(\d+)(?:-[^"']*)?["'][^>]*)>""", RegexOption.IGNORE_CASE)
+        val timetableConRegex = Regex("""<div\b([^>]*\bclass\s*=\s*["'][^"']*\btimetable_con\b[^"']*["'][^>]*)>""", RegexOption.IGNORE_CASE)
+
+        val courses = mutableListOf<ImportCourseJsonModel>()
+        val dedup = HashSet<String>()
+
+        for (scopeHtml in searchScopes) {
+            val allTds = extractAllMatchingTds(scopeHtml, tdRegex)
+            for (cell in allTds) {
+                val blocks = extractMatchingElementsByOpenPattern(cell.innerHtml, "div", timetableConRegex)
+                    .ifEmpty { extractTopLevelElements(cell.innerHtml, "div") }
+                    .ifEmpty { listOf(HtmlElementMatch("", cell.innerHtml)) }
+                for (block in blocks) {
+                    val parsed = parseBkSingleBlock(
+                        day = cell.day,
+                        blockHtml = block.innerHtml,
+                        fallbackStartSection = cell.startSection,
+                        fallbackRowspan = cell.rowspan
+                    )
+                    for (item in parsed) {
+                        if (dedup.add(bkCourseDedupKey(item))) {
+                            courses.add(item)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (courses.isEmpty()) {
+            for (item in parseBkListTableHtml(html)) {
+                if (dedup.add(bkCourseDedupKey(item))) {
+                    courses.add(item)
+                }
+            }
+        }
+
+        return ParsedBkScheduleResult(courses = courses, suggestedTermStartDate = suggestedDate)
+    }
+
+    private fun parseBkListTableHtml(html: String): List<ImportCourseJsonModel> {
+        val listTableOpenRegex = Regex("""<table\b([^>]*\bid\s*=\s*["']kblist_table["'][^>]*)>""", RegexOption.IGNORE_CASE)
+        val listTables = extractMatchingElementsByOpenPattern(html, "table", listTableOpenRegex)
+        if (listTables.isEmpty()) return emptyList()
+
+        val timetableConRegex = Regex("""<div\b([^>]*\bclass\s*=\s*["'][^"']*\btimetable_con\b[^"']*["'][^>]*)>""", RegexOption.IGNORE_CASE)
+        val xqIdRegex = Regex("""\bid\s*=\s*["']xq_([1-7])["']""", RegexOption.IGNORE_CASE)
+        val jcIdRegex = Regex("""\bid\s*=\s*["']jc_([1-7])-(\d+)-(\d+)["']""", RegexOption.IGNORE_CASE)
+        val sectionTextRegex = Regex("""(\d+)\s*[-—–~至]\s*(\d+)\s*节""")
+
+        val results = mutableListOf<ImportCourseJsonModel>()
+        for (table in listTables) {
+            val rows = extractTopLevelElements(table.innerHtml, "tr")
+            var currentDay = 0
+            for (row in rows) {
+                val cells = extractTopLevelElements(row.innerHtml, "td")
+                if (cells.isEmpty()) continue
+                var rowStartSec = 0
+                var rowEndSec = 0
+                for (cell in cells) {
+                    val xqMatch = xqIdRegex.find(cell.openTagAttrs)
+                    if (xqMatch != null) {
+                        currentDay = xqMatch.groupValues[1].toIntOrNull() ?: currentDay
+                    }
+                    val jcMatch = jcIdRegex.find(cell.openTagAttrs)
+                    if (jcMatch != null) {
+                        currentDay = jcMatch.groupValues[1].toIntOrNull() ?: currentDay
+                        rowStartSec = jcMatch.groupValues[2].toIntOrNull() ?: rowStartSec
+                        rowEndSec = jcMatch.groupValues[3].toIntOrNull() ?: rowEndSec
+                    }
+                    val cellText = stripHtml(cell.innerHtml)
+                    if (cellText.startsWith("星期")) {
+                        parseDayOfWeekToken(cellText)?.let { currentDay = it }
+                    }
+                    if (rowStartSec == 0 && !cell.innerHtml.contains("timetable_con", ignoreCase = true)) {
+                        sectionTextRegex.find(cellText)?.let { m ->
+                            rowStartSec = m.groupValues[1].toIntOrNull() ?: 0
+                            rowEndSec = m.groupValues[2].toIntOrNull() ?: rowStartSec
+                        }
+                    }
+                }
+                if (currentDay !in 1..7) continue
+                val rowspanFallback = if (rowStartSec > 0 && rowEndSec >= rowStartSec) rowEndSec - rowStartSec + 1 else 1
+                val blocks = extractMatchingElementsByOpenPattern(row.innerHtml, "div", timetableConRegex)
+                for (block in blocks) {
+                    results.addAll(
+                        parseBkSingleBlock(
+                            day = currentDay,
+                            blockHtml = block.innerHtml,
+                            fallbackStartSection = rowStartSec,
+                            fallbackRowspan = rowspanFallback
+                        )
+                    )
+                }
+            }
+        }
+        return results
+    }
+
     private fun extractAllMatchingTds(
         html: String,
         tdOpenRegex: Regex
-    ): List<Pair<Int, String>> {
-        val result = mutableListOf<Pair<Int, String>>()
+    ): List<BkTdCell> {
+        val result = mutableListOf<BkTdCell>()
         val anyTd = Regex("""<(/?)td\b([^>]*)>""", RegexOption.IGNORE_CASE)
         var searchFrom = 0
         while (searchFrom < html.length) {
             val m = tdOpenRegex.find(html, searchFrom) ?: break
+            val openAttrs = m.groupValues[1]
             val day = m.groupValues[2].toIntOrNull() ?: 0
+            val startSection = m.groupValues[3].toIntOrNull() ?: 0
+            val rowspan = extractAttr(openAttrs, "rowspan")?.toIntOrNull()?.coerceAtLeast(1) ?: 1
             val contentStart = m.range.last + 1
             var depth = 1
             var pos = contentStart
@@ -268,7 +525,14 @@ object CumtParsers {
             }
             if (contentEnd >= 0) {
                 if (day in 1..7) {
-                    result.add(day to html.substring(contentStart, contentEnd))
+                    result.add(
+                        BkTdCell(
+                            day = day,
+                            startSection = startSection,
+                            rowspan = rowspan,
+                            innerHtml = html.substring(contentStart, contentEnd)
+                        )
+                    )
                 }
                 searchFrom = closeEnd
             } else {
@@ -278,12 +542,31 @@ object CumtParsers {
         return result
     }
 
-    private fun parseBkSingleBlock(day: Int, blockHtml: String): List<ImportCourseJsonModel> {
+    private fun stripBkFieldPrefix(text: String): String {
+        return text
+            .replace(Regex("""^(?:上课地点|地点|场地|教室|授课教师|教师|学分|节/周|周次|周数|节次)\s*[:：]\s*"""), "")
+            .trim()
+    }
+
+    private fun parseBkSingleBlock(
+        day: Int,
+        blockHtml: String,
+        fallbackStartSection: Int = 0,
+        fallbackRowspan: Int = 1
+    ): List<ImportCourseJsonModel> {
+        val headerSplit = Regex("""<p\b""", RegexOption.IGNORE_CASE).find(blockHtml)
+        val headerSegment = if (headerSplit != null) blockHtml.substring(0, headerSplit.range.first) else blockHtml
+
         val title = (
-            Regex("""<span\b[^>]*class\s*=\s*["'][^"']*\btitle\b[^"']*["'][^>]*>(.*?)</span>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                .find(blockHtml)?.groupValues?.get(1)
-                ?: Regex("""<u\b[^>]*class\s*=\s*["'][^"']*\btitle\b[^"']*["'][^>]*>(.*?)</u>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-                    .find(blockHtml)?.groupValues?.get(1)
+            Regex(
+                """<(span|u|a|font|b|strong)\b[^>]*class\s*=\s*["'][^"']*\btitle\b[^"']*["'][^>]*>(.*?)</\1>""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).find(blockHtml)?.groupValues?.get(2)
+                ?: Regex(
+                    """<(u|a|font|b|strong)\b[^>]*>(.*?)</\1>""",
+                    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+                ).find(headerSegment)?.groupValues?.get(2)
+                ?: headerSegment.split(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)).firstOrNull()
             )?.let(::stripHtml).orEmpty()
         if (title.isBlank()) return emptyList()
 
@@ -292,28 +575,74 @@ object CumtParsers {
         var teacher = ""
         var credit: Float? = null
         var sectionWeekRaw = ""
+        var weeksOnlyRaw = ""
+        var sectionsOnlyRaw = ""
+
+        val titleAttrRegex = Regex("""title\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE)
+        val sectionWeekHintRegex = Regex("""[（(]\s*\d+[^）)]*节?\s*[）)].*周""")
+        val weeksOnlyHintRegex = Regex("""\d+(?:\s*[-—–~,，、]\s*\d+)*\s*(?:[（(][单双][）)])?\s*周""")
 
         for (p in pElements) {
-            val pHtml = p.innerHtml
-            val spanTitle = Regex("""title\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE)
-                .find(pHtml)?.groupValues?.get(1)?.trim() ?: continue
-            val text = stripHtml(pHtml)
-            when (spanTitle) {
-                "上课地点" -> position = text.removePrefix("上课地点：").removePrefix("上课地点:").trim()
-                "教师" -> teacher = text.removePrefix("教师：").removePrefix("教师:").trim()
-                "学分" -> credit = text.replace(Regex("[^0-9.]"), "").toFloatOrNull()
-                "节/周" -> sectionWeekRaw = text.replace("？", "").replace("?", "").trim()
+            val combinedAttrs = "${p.openTagAttrs} ${p.innerHtml}"
+            val rawText = stripHtml(p.innerHtml)
+            if (rawText.isBlank()) continue
+            val cleanText = stripBkFieldPrefix(rawText)
+            val attrTitle = titleAttrRegex.find(combinedAttrs)?.groupValues?.get(1)?.trim().orEmpty()
+
+            when {
+                attrTitle.contains("节/周") -> sectionWeekRaw = cleanText
+                attrTitle.contains("周次") || attrTitle.contains("周数") || (attrTitle.contains("周") && !attrTitle.contains("节")) -> {
+                    weeksOnlyRaw = cleanText
+                }
+                attrTitle.contains("节次") -> sectionsOnlyRaw = cleanText
+                attrTitle.contains("地点") || attrTitle.contains("场地") || attrTitle.contains("教室") || attrTitle.contains("教学楼") -> {
+                    position = cleanText
+                }
+                attrTitle.contains("教师") -> teacher = cleanText
+                attrTitle.contains("学分") -> credit = cleanText.replace(Regex("[^0-9.]"), "").toFloatOrNull()
+                combinedAttrs.contains("glyphicon-time", ignoreCase = true) ||
+                    combinedAttrs.contains("glyphicon-calendar", ignoreCase = true) -> {
+                    if (cleanText.contains("(") || cleanText.contains("（")) {
+                        sectionWeekRaw = cleanText
+                    } else if (weeksOnlyHintRegex.containsMatchIn(cleanText)) {
+                        weeksOnlyRaw = cleanText
+                    }
+                }
+                combinedAttrs.contains("glyphicon-map-marker", ignoreCase = true) -> position = cleanText
+                combinedAttrs.contains("glyphicon-user", ignoreCase = true) -> teacher = cleanText
+                sectionWeekHintRegex.containsMatchIn(cleanText) -> {
+                    if (sectionWeekRaw.isBlank()) sectionWeekRaw = cleanText
+                }
+                weeksOnlyHintRegex.containsMatchIn(cleanText) -> {
+                    if (sectionWeekRaw.isBlank() && weeksOnlyRaw.isBlank()) weeksOnlyRaw = cleanText
+                }
             }
         }
-        if (sectionWeekRaw.isBlank()) return emptyList()
 
+        val effectiveSectionWeek = when {
+            sectionWeekRaw.isNotBlank() -> sectionWeekRaw
+            weeksOnlyRaw.isNotBlank() && sectionsOnlyRaw.isNotBlank() -> {
+                val cleanSec = sectionsOnlyRaw
+                    .replace("(", "").replace(")", "")
+                    .replace("（", "").replace("）", "")
+                    .trim()
+                "($cleanSec)$weeksOnlyRaw"
+            }
+            weeksOnlyRaw.isNotBlank() -> weeksOnlyRaw
+            else -> ""
+        }
+        if (effectiveSectionWeek.isBlank()) return emptyList()
+
+        val fallbackEnd = if (fallbackStartSection > 0) fallbackStartSection + fallbackRowspan - 1 else 0
         return expandBkCourse(
             day = day,
             name = title,
             teacher = teacher,
             position = position,
             credit = credit,
-            sectionWeekRaw = sectionWeekRaw
+            sectionWeekRaw = effectiveSectionWeek,
+            fallbackStartSection = fallbackStartSection,
+            fallbackEndSection = fallbackEnd
         )
     }
 
@@ -323,23 +652,52 @@ object CumtParsers {
         teacher: String,
         position: String,
         credit: Float?,
-        sectionWeekRaw: String
+        sectionWeekRaw: String,
+        fallbackStartSection: Int = 0,
+        fallbackEndSection: Int = 0
     ): List<ImportCourseJsonModel> {
-        val cleaned = sectionWeekRaw.replace("？", "").replace("?", "").trim()
-        val match = Regex("""\(([^)]+)\)\s*(.*)""").find(cleaned) ?: return emptyList()
-        val sectionsText = match.groupValues[1]
-        val weeksText = match.groupValues[2]
+        val cleaned = sectionWeekRaw
+            .replace("？", "")
+            .replace("?", "")
+            .replace("（", "(")
+            .replace("）", ")")
+            .trim()
+        if (cleaned.isEmpty()) return emptyList()
+
+        val hasDigitRegex = Regex("""\d""")
+        var sectionsText = ""
+        var weeksText = ""
+
+        val standardMatch = Regex("""\(([^)]+)\)\s*(.*)""").find(cleaned)
+        if (standardMatch != null &&
+            hasDigitRegex.containsMatchIn(standardMatch.groupValues[1]) &&
+            standardMatch.groupValues[2].isNotBlank()
+        ) {
+            sectionsText = standardMatch.groupValues[1]
+            weeksText = standardMatch.groupValues[2]
+        } else {
+            val reversedMatch = Regex("""^(.*?周[^(]*(?:\([单双]\))?)\s*\(([^)]+)\)""").find(cleaned)
+            if (reversedMatch != null && hasDigitRegex.containsMatchIn(reversedMatch.groupValues[2])) {
+                weeksText = reversedMatch.groupValues[1]
+                sectionsText = reversedMatch.groupValues[2]
+            } else if (fallbackStartSection > 0) {
+                weeksText = cleaned
+            } else {
+                return emptyList()
+            }
+        }
 
         val weeks = parseWeekTokens(weeksText)
         if (weeks.isEmpty()) return emptyList()
 
-        val sectionRanges = sectionsText.split(",", "，")
-            .mapNotNull { token ->
-                val nums = Regex("""(\d+)(?:\s*-\s*(\d+))?""").find(token) ?: return@mapNotNull null
-                val start = nums.groupValues[1].toIntOrNull() ?: return@mapNotNull null
-                val end = nums.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: start
-                if (start <= end) start to end else end to start
-            }
+        val sectionRanges = if (sectionsText.isNotBlank()) {
+            parseSectionRanges(sectionsText)
+        } else if (fallbackStartSection > 0) {
+            listOf(fallbackStartSection to maxOf(fallbackStartSection, fallbackEndSection))
+        } else {
+            emptyList()
+        }
+        if (sectionRanges.isEmpty()) return emptyList()
 
         return sectionRanges.map { (startSec, endSec) ->
             ImportCourseJsonModel(

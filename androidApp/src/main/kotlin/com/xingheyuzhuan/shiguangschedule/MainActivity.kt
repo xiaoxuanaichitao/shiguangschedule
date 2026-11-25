@@ -1,6 +1,8 @@
 package com.xingheyuzhuan.shiguangschedule
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -11,6 +13,18 @@ import androidx.core.content.IntentCompat
 import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
 
 class MainActivity : AppCompatActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        val currentConfig = newBase.resources.configuration
+        if (currentConfig.fontScale != 1.0f) {
+            val fixedConfig = Configuration(currentConfig).apply {
+                fontScale = 1.0f
+            }
+            super.attachBaseContext(newBase.createConfigurationContext(fixedConfig))
+        } else {
+            super.attachBaseContext(newBase)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

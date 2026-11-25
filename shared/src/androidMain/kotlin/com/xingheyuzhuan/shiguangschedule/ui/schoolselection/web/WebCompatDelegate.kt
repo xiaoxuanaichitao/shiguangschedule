@@ -39,6 +39,7 @@ class WebCompatDelegate(private val webView: WebView) {
             javaScriptEnabled = true
             domStorageEnabled = true
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            textZoom = 100
 
             if (isDesktopMode) {
                 userAgentString = DESKTOP_USER_AGENT

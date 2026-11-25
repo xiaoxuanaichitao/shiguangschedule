@@ -1,6 +1,8 @@
 package com.xingheyuzhuan.shiguangschedule.cumt
 
+import androidx.compose.ui.unit.Density
 import com.xingheyuzhuan.shiguangschedule.data.model.ScheduleGridStyle
+import com.xingheyuzhuan.shiguangschedule.ui.theme.withDefaultFontScale
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -688,5 +690,19 @@ class CumtUnitTests {
         assertTrue(style.textAlignCenterVertical)
         assertEquals(11f, style.courseBlockCornerRadiusDp)
         assertEquals(2f, style.courseBlockOuterPaddingDp)
+    }
+
+    @Test
+    fun themeDensityForcesDefaultFontScale() {
+        val scaled = Density(density = 3.0f, fontScale = 1.4f).withDefaultFontScale()
+        assertEquals(3.0f, scaled.density)
+        assertEquals(1.0f, scaled.fontScale)
+
+        val small = Density(density = 2.5f, fontScale = 0.85f).withDefaultFontScale()
+        assertEquals(2.5f, small.density)
+        assertEquals(1.0f, small.fontScale)
+
+        val defaultDensity = Density(density = 2.0f, fontScale = 1.0f)
+        assertEquals(defaultDensity, defaultDensity.withDefaultFontScale())
     }
 }

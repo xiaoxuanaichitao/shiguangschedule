@@ -5,8 +5,11 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
@@ -70,12 +73,23 @@ fun ShiguangScheduleTheme(
         themeMode = themeMode
     )
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    // 忽略系统字体缩放，统一使用默认 1.0 倍字体比例，避免大字体设备布局错位
+    val currentDensity = LocalDensity.current
+    val fixedFontScaleDensity = remember(currentDensity) {
+        currentDensity.withDefaultFontScale()
+    }
+
+    CompositionLocalProvider(LocalDensity provides fixedFontScaleDensity) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }
+
+internal fun Density.withDefaultFontScale(): Density =
+    if (fontScale == 1f) this else Density(density = density, fontScale = 1f)
 
 /**
  * 共享的 MaterialKolor 动态配色方案生成函数

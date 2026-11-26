@@ -3,6 +3,7 @@ package com.xingheyuzhuan.shiguangschedule.data.model
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -157,6 +158,9 @@ data class AppSettingsModel(
 
     /** 开发者功能总开关（默认关闭） */
     val developerModeEnabled: Boolean = false,
+
+    /** 软件全局界面字号倍率（0.85f~1.25f，仅控制应用 UI 字体，不影响课表网格字号） */
+    val appUiFontScale: Float = 1.0f,
 ) {
     /**
      * 将 DataStore 的 Key 定义在伴生对象中。
@@ -196,6 +200,8 @@ data class AppSettingsModel(
         val KEY_BACKGROUND_IMAGE_PATH_DARK = stringPreferencesKey("background_image_path_dark")
         /** 开发者模式总开关的存储键 */
         val KEY_DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
+        /** 软件全局界面字号倍率的存储键 */
+        val KEY_APP_UI_FONT_SCALE = floatPreferencesKey("app_ui_font_scale")
 
         /**
          * 允许备份的 DataStore 键集合白名单。
@@ -245,6 +251,7 @@ data class AppSettingsModel(
                     dark = prefs[KEY_BACKGROUND_IMAGE_PATH_DARK] ?: d.backgroundImagePath.dark
                 ),
                 developerModeEnabled = prefs[KEY_DEVELOPER_MODE_ENABLED] ?: d.developerModeEnabled,
+                appUiFontScale = (prefs[KEY_APP_UI_FONT_SCALE] ?: d.appUiFontScale).coerceIn(0.85f, 1.25f),
             )
         }
     }

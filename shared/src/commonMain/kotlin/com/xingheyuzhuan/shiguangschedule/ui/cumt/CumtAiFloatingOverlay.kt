@@ -13,6 +13,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -61,6 +62,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,35 +72,48 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiActionStatus
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiChatMessage
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiConfig
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiOrbIconStyle
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiPendingAction
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiSessionRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.ShiguangMcpServerManager
 import com.xingheyuzhuan.shiguangschedule.tool.FileManagerCallbacks
 import com.xingheyuzhuan.shiguangschedule.tool.rememberFileManager
+import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.koinInject
 import shiguangschedule.shared.generated.resources.Res
+import shiguangschedule.shared.generated.resources.ai_empty_welcome
+import shiguangschedule.shared.generated.resources.ai_orb_bubbles
+import shiguangschedule.shared.generated.resources.ai_orb_mascot
 import shiguangschedule.shared.generated.resources.arrow_forward_24px
 import shiguangschedule.shared.generated.resources.check_circle_24px
 import shiguangschedule.shared.generated.resources.close_24px
@@ -109,7 +124,7 @@ import kotlin.math.roundToInt
 
 /**
  * 全局 Notion 风格 AI 悬浮小球 + 半屏灵动对话抽屉。
- * 挂载在 AppNavigation 顶层，可在课表/成绩/考试等任意页面快速唤起并实时看到课表变更。
+ * 支持尺寸调节、闲置透明度、3 秒自动贴边半隐、双内置手绘图标与相册自选头像。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,12 +143,10 @@ fun CumtAiFloatingOverlay(
     val hasUnreadReply by sessionRepo.hasUnreadReply.collectAsState()
     val isQuickSheetOpen by sessionRepo.isQuickSheetOpen.collectAsState()
 
-    // 若用户开启了 MCP 服务，启动应用时自动拉起监听
     LaunchedEffect(Unit) {
         mcpManager.ensureAutoStartIfEnabled()
     }
 
-    // 在 AI 全屏页、教务 WebView 登录/抓课页自动避让隐藏悬浮球
     val shouldShowOrb = aiConfig.floatingOrbEnabled &&
         currentDestination != Destination.CumtAiCourseImport &&
         currentDestination !is Destination.WebView &&
@@ -152,8 +165,7 @@ fun CumtAiFloatingOverlay(
 
     if (shouldShowOrb) {
         AiDraggableFloatingOrb(
-            savedYFraction = aiConfig.floatingOrbYFraction,
-            savedOnRight = aiConfig.floatingOrbOnRight,
+            aiConfig = aiConfig,
             isBusy = isBusy,
             hasUnread = hasUnreadReply,
             onPositionSettled = { yFrac, onRight ->
@@ -205,17 +217,16 @@ fun CumtAiFloatingOverlay(
             onDismissRequest = { sessionRepo.setQuickSheetOpen(false) },
             sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
             dragHandle = null
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.76f)
+                    .fillMaxHeight(aiConfig.quickSheetHeightFraction.coerceIn(0.55f, 0.92f))
                     .navigationBarsPadding()
                     .imePadding()
             ) {
-                // 顶部极简 Drag Pill + 操作栏
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -240,10 +251,13 @@ fun CumtAiFloatingOverlay(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        AiSparkleMiniBadge()
+                        AiOrbAvatarSurface(
+                            aiConfig = aiConfig,
+                            size = 36.dp
+                        )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "矿大 AI 助手",
@@ -290,7 +304,7 @@ fun CumtAiFloatingOverlay(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text("全屏/MCP")
+                            Text("全屏/设置")
                         }
                         IconButton(
                             onClick = { sessionRepo.setQuickSheetOpen(false) },
@@ -339,7 +353,6 @@ fun CumtAiFloatingOverlay(
                     }
                 }
 
-                // 快捷指令胶囊
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -372,20 +385,18 @@ fun CumtAiFloatingOverlay(
                     }
                 }
 
-                // 共享聊天消息列表
                 Box(modifier = Modifier.weight(1f)) {
                     AiChatMessageList(
                         messages = messages,
                         isBusy = isBusy,
                         emptyTitle = "随时问我，不打断当前课表",
-                        emptySubtitle = "直接发文字加课/调课/查空课，或点左下角图标传实验安排截图，修改后背景课表即时刷新。",
+                        emptySubtitle = "发文字加课/调课/查空课，或点左下角传实验安排截图，确认后背景课表实时刷新。",
                         onConfirmAction = sessionRepo::confirmPendingAction,
                         onRejectAction = sessionRepo::rejectPendingAction,
                         onConfirmAllActions = sessionRepo::confirmAllPendingActions
                     )
                 }
 
-                // 底部多模态输入框
                 AiMultimodalInputBar(
                     text = inputText,
                     onTextChange = { inputText = it },
@@ -414,10 +425,99 @@ fun CumtAiFloatingOverlay(
     }
 }
 
+/**
+ * 极简 Notion 风格圆形头像/悬浮球渲染组件（自动适配浅色/深色模式与自选图片）。
+ */
+@Composable
+internal fun AiOrbAvatarSurface(
+    aiConfig: CumtAiConfig,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    isBusy: Boolean = false,
+    hasUnread: Boolean = false
+) {
+    val isDark = LocalIsDarkTheme.current
+    val bgColor = if (isDark) Color(0xFF22252A) else Color(0xFFFFFFFF)
+    val borderColor = if (isDark) Color.White.copy(alpha = 0.16f) else Color(0x1C000000)
+    val inkTint = if (isDark) Color(0xFFF1F3F5) else Color(0xFF181A1E)
+    val accentRingColor = MaterialTheme.colorScheme.primary
+
+    val infiniteTransition = rememberInfiniteTransition(label = "orbSpin")
+    val spinAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "spin"
+    )
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .shadow(elevation = 6.dp, shape = CircleShape, clip = false)
+            .clip(CircleShape)
+            .background(bgColor)
+            .border(1.dp, borderColor, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        val style = aiConfig.orbIconStyleEnum
+        if (style == CumtAiOrbIconStyle.CUSTOM && aiConfig.floatingOrbCustomImagePath.isNotBlank()) {
+            AsyncImage(
+                model = aiConfig.floatingOrbCustomImagePath,
+                contentDescription = "AI 悬浮球自定义图标",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+            )
+        } else {
+            val drawableRes = when (style) {
+                CumtAiOrbIconStyle.MASCOT -> Res.drawable.ai_orb_mascot
+                else -> Res.drawable.ai_orb_bubbles
+            }
+            Image(
+                painter = painterResource(drawableRes),
+                contentDescription = "矿大 AI 助手",
+                contentScale = ContentScale.Fit,
+                colorFilter = ColorFilter.tint(inkTint),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(size * 0.13f)
+            )
+        }
+
+        if (isBusy) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                rotate(spinAngle) {
+                    drawArc(
+                        color = accentRingColor,
+                        startAngle = 0f,
+                        sweepAngle = 105f,
+                        useCenter = false,
+                        style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+            }
+        }
+
+        if (hasUnread) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(size * 0.10f)
+                    .size((size * 0.20f).coerceIn(8.dp, 12.dp))
+                    .clip(CircleShape)
+                    .background(Color(0xFF10B981))
+            )
+        }
+    }
+}
+
 @Composable
 private fun AiDraggableFloatingOrb(
-    savedYFraction: Float,
-    savedOnRight: Boolean,
+    aiConfig: CumtAiConfig,
     isBusy: Boolean,
     hasUnread: Boolean,
     onPositionSettled: (Float, Boolean) -> Unit,
@@ -425,7 +525,7 @@ private fun AiDraggableFloatingOrb(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val orbSizeDp = 50.dp
+        val orbSizeDp = aiConfig.floatingOrbSizeDp.coerceIn(36f, 68f).dp
         val edgePaddingPx = with(density) { 12.dp.toPx() }
         val orbSizePx = with(density) { orbSizeDp.toPx() }
         val minYPx = with(density) { 88.dp.toPx() }
@@ -435,19 +535,40 @@ private fun AiDraggableFloatingOrb(
         val rightSnapX = (constraints.maxWidth.toFloat() - orbSizePx - edgePaddingPx).coerceAtLeast(leftSnapX)
 
         var isDragging by remember { mutableStateOf(false) }
-        var targetX by remember(savedOnRight, rightSnapX) {
-            mutableFloatStateOf(if (savedOnRight) rightSnapX else leftSnapX)
+        var isOnRight by remember(aiConfig.floatingOrbOnRight) { mutableStateOf(aiConfig.floatingOrbOnRight) }
+        var interactionTick by remember { mutableIntStateOf(0) }
+        var isIdlePeeked by remember { mutableStateOf(false) }
+
+        var dragX by remember(aiConfig.floatingOrbOnRight, rightSnapX) {
+            mutableFloatStateOf(if (aiConfig.floatingOrbOnRight) rightSnapX else leftSnapX)
         }
-        var targetY by remember(savedYFraction, maxYPx) {
-            mutableFloatStateOf((constraints.maxHeight * savedYFraction).coerceIn(minYPx, maxYPx))
+        var targetY by remember(aiConfig.floatingOrbYFraction, maxYPx) {
+            mutableFloatStateOf((constraints.maxHeight * aiConfig.floatingOrbYFraction).coerceIn(minYPx, maxYPx))
+        }
+
+        // 闲置 3 秒后自动贴边半隐（推理中、有未读回复或关闭自动半隐时保持完整展示）
+        LaunchedEffect(interactionTick, isDragging, isBusy, hasUnread, aiConfig.floatingOrbAutoPeek) {
+            isIdlePeeked = false
+            if (!isDragging && !isBusy && !hasUnread && aiConfig.floatingOrbAutoPeek) {
+                delay(3000L)
+                isIdlePeeked = true
+            }
+        }
+
+        val resolvedTargetX = when {
+            isDragging -> dragX
+            isIdlePeeked && isOnRight -> constraints.maxWidth.toFloat() - orbSizePx * 0.46f
+            isIdlePeeked && !isOnRight -> -orbSizePx * 0.54f
+            isOnRight -> rightSnapX
+            else -> leftSnapX
         }
 
         val animatedX by animateFloatAsState(
-            targetValue = targetX,
+            targetValue = resolvedTargetX,
             animationSpec = if (isDragging) {
                 spring(stiffness = Spring.StiffnessHigh)
             } else {
-                spring(dampingRatio = 0.72f, stiffness = 420f)
+                spring(dampingRatio = 0.76f, stiffness = 380f)
             },
             label = "orbX"
         )
@@ -456,150 +577,62 @@ private fun AiDraggableFloatingOrb(
             animationSpec = spring(dampingRatio = 0.85f, stiffness = 500f),
             label = "orbY"
         )
-
-        val infiniteTransition = rememberInfiniteTransition(label = "orbSpin")
-        val spinAngle by infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1800, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "spin"
+        val animatedAlpha by animateFloatAsState(
+            targetValue = if (isDragging || isBusy || hasUnread || !isIdlePeeked) {
+                1f
+            } else {
+                aiConfig.floatingOrbIdleAlpha.coerceIn(0.35f, 1.0f)
+            },
+            animationSpec = tween(260),
+            label = "orbAlpha"
         )
 
         Box(
             modifier = Modifier
                 .offset { IntOffset(animatedX.roundToInt(), animatedY.roundToInt()) }
-                .size(orbSizeDp)
-                .alpha(if (isDragging || isBusy || hasUnread) 1f else 0.92f)
+                .alpha(animatedAlpha)
                 .pointerInput(leftSnapX, rightSnapX, minYPx, maxYPx) {
                     detectDragGestures(
-                        onDragStart = { isDragging = true },
+                        onDragStart = {
+                            isDragging = true
+                            isIdlePeeked = false
+                            interactionTick++
+                            dragX = if (isOnRight) rightSnapX else leftSnapX
+                        },
                         onDragEnd = {
                             isDragging = false
-                            val centerX = targetX + orbSizePx / 2f
+                            val centerX = dragX + orbSizePx / 2f
                             val snapRight = centerX >= constraints.maxWidth / 2f
-                            targetX = if (snapRight) rightSnapX else leftSnapX
+                            isOnRight = snapRight
+                            dragX = if (snapRight) rightSnapX else leftSnapX
                             targetY = targetY.coerceIn(minYPx, maxYPx)
+                            interactionTick++
                             val yFrac = (targetY / constraints.maxHeight.coerceAtLeast(1)).coerceIn(0.12f, 0.85f)
                             onPositionSettled(yFrac, snapRight)
                         },
                         onDragCancel = {
                             isDragging = false
+                            interactionTick++
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            targetX = (targetX + dragAmount.x).coerceIn(leftSnapX, rightSnapX)
+                            dragX = (dragX + dragAmount.x).coerceIn(leftSnapX, rightSnapX)
                             targetY = (targetY + dragAmount.y).coerceIn(minYPx, maxYPx)
                         }
                     )
                 }
-                .shadow(elevation = 8.dp, shape = CircleShape, clip = false)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF4F46E5), Color(0xFF0E7C86))
-                    )
-                )
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
+                .clickable {
+                    interactionTick++
+                    isIdlePeeked = false
+                    onClick()
+                }
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                // 内圈柔和微光边
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.25f),
-                    radius = size.minDimension / 2f - 1.5.dp.toPx(),
-                    style = Stroke(width = 1.5.dp.toPx())
-                )
-
-                // AI 思考时的流光旋转弧
-                if (isBusy) {
-                    rotate(spinAngle) {
-                        drawArc(
-                            color = Color.White,
-                            startAngle = 0f,
-                            sweepAngle = 110f,
-                            useCenter = false,
-                            style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round)
-                        )
-                    }
-                }
-
-                // Notion/AI 风格四角星芒图标
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                val outerR = size.minDimension * 0.25f
-                val innerR = outerR * 0.34f
-                val mainStar = Path().apply {
-                    moveTo(cx, cy - outerR)
-                    quadraticTo(cx + innerR * 0.5f, cy - innerR * 0.5f, cx + outerR, cy)
-                    quadraticTo(cx + innerR * 0.5f, cy + innerR * 0.5f, cx, cy + outerR)
-                    quadraticTo(cx - innerR * 0.5f, cy + innerR * 0.5f, cx - outerR, cy)
-                    quadraticTo(cx - innerR * 0.5f, cy - innerR * 0.5f, cx, cy - outerR)
-                    close()
-                }
-                drawPath(mainStar, color = Color.White)
-
-                // 右上角小伴星
-                val sx = cx + outerR * 0.85f
-                val sy = cy - outerR * 0.85f
-                val sr = outerR * 0.32f
-                val miniStar = Path().apply {
-                    moveTo(sx, sy - sr)
-                    lineTo(sx + sr * 0.35f, sy - sr * 0.35f)
-                    lineTo(sx + sr, sy)
-                    lineTo(sx + sr * 0.35f, sy + sr * 0.35f)
-                    lineTo(sx, sy + sr)
-                    lineTo(sx - sr * 0.35f, sy + sr * 0.35f)
-                    lineTo(sx - sr, sy)
-                    lineTo(sx - sr * 0.35f, sy - sr * 0.35f)
-                    close()
-                }
-                drawPath(miniStar, color = Color.White.copy(alpha = 0.88f))
-            }
-
-            if (hasUnread) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF34D399))
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun AiSparkleMiniBadge(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(Color(0xFF4F46E5), Color(0xFF0E7C86))
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.size(20.dp)) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val r = size.minDimension * 0.42f
-            val ir = r * 0.32f
-            val p = Path().apply {
-                moveTo(cx, cy - r)
-                quadraticTo(cx + ir * 0.5f, cy - ir * 0.5f, cx + r, cy)
-                quadraticTo(cx + ir * 0.5f, cy + ir * 0.5f, cx, cy + r)
-                quadraticTo(cx - ir * 0.5f, cy + ir * 0.5f, cx - r, cy)
-                quadraticTo(cx - ir * 0.5f, cy - ir * 0.5f, cx, cy - r)
-                close()
-            }
-            drawPath(p, color = Color.White)
+            AiOrbAvatarSurface(
+                aiConfig = aiConfig,
+                size = orbSizeDp,
+                isBusy = isBusy,
+                hasUnread = hasUnread
+            )
         }
     }
 }
@@ -624,27 +657,35 @@ internal fun AiChatMessageList(
     }
 
     if (messages.isEmpty() && !isBusy) {
+        val inkColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.88f)
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
+                .padding(horizontal = 24.dp, vertical = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AiSparkleMiniBadge(modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(4.dp))
+                Image(
+                    painter = painterResource(Res.drawable.ai_empty_welcome),
+                    contentDescription = "AI 助手欢迎插画",
+                    contentScale = ContentScale.Fit,
+                    colorFilter = ColorFilter.tint(inkColor),
+                    modifier = Modifier.size(136.dp)
+                )
                 Text(
                     text = emptyTitle,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
                 )
                 Text(
                     text = emptySubtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -696,6 +737,17 @@ private fun AiChatBubbleItem(
     onConfirmAll: () -> Unit
 ) {
     val isUser = message.role == "user"
+    val contentColor = when {
+        message.isError -> CumtAccent.CORAL.contentColor()
+        isUser -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    val codeBgColor = if (isUser) {
+        Color.White.copy(alpha = 0.18f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -703,10 +755,10 @@ private fun AiChatBubbleItem(
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 18.dp,
-                topEnd = 18.dp,
-                bottomStart = if (isUser) 18.dp else 6.dp,
-                bottomEnd = if (isUser) 6.dp else 18.dp
+                topStart = 20.dp,
+                topEnd = 20.dp,
+                bottomStart = if (isUser) 20.dp else 6.dp,
+                bottomEnd = if (isUser) 6.dp else 20.dp
             ),
             color = when {
                 message.isError -> CumtAccent.CORAL.containerColor()
@@ -737,19 +789,22 @@ private fun AiChatBubbleItem(
                         }
                     }
                 }
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = when {
-                        message.isError -> CumtAccent.CORAL.contentColor()
-                        isUser -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
-                )
+                if (isUser || message.isError) {
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor
+                    )
+                } else {
+                    AiLightweightMarkdownText(
+                        rawText = message.text,
+                        textColor = contentColor,
+                        codeBgColor = codeBgColor
+                    )
+                }
             }
         }
 
-        // 待确认或已执行的写操作卡片
         if (message.pendingActions.isNotEmpty()) {
             val pendingCount = message.pendingActions.count { it.status == CumtAiActionStatus.PENDING }
             Column(
@@ -783,6 +838,112 @@ private fun AiChatBubbleItem(
     }
 }
 
+/**
+ * 轻量级 Markdown 排版渲染器：支持代码块、标题、无序列表、**加粗** 与 `行内代码`。
+ */
+@Composable
+internal fun AiLightweightMarkdownText(
+    rawText: String,
+    textColor: Color,
+    codeBgColor: Color
+) {
+    val segments = remember(rawText) { splitMarkdownCodeBlocks(rawText) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        segments.forEach { (isCode, body) ->
+            if (isCode) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = codeBgColor,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = body.trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = textColor,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            } else {
+                val annotated = remember(body, codeBgColor) {
+                    parseInlineMarkdown(body, codeBgColor)
+                }
+                Text(
+                    text = annotated,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor
+                )
+            }
+        }
+    }
+}
+
+internal fun splitMarkdownCodeBlocks(input: String): List<Pair<Boolean, String>> {
+    val fenceRegex = Regex("""```[a-zA-Z0-9_-]*\n?([\s\S]*?)```""")
+    val result = mutableListOf<Pair<Boolean, String>>()
+    var lastIdx = 0
+    fenceRegex.findAll(input).forEach { m ->
+        val before = input.substring(lastIdx, m.range.first).trim()
+        if (before.isNotEmpty()) result.add(false to before)
+        val code = m.groupValues[1].trim()
+        if (code.isNotEmpty()) result.add(true to code)
+        lastIdx = m.range.last + 1
+    }
+    val tail = input.substring(lastIdx).trim()
+    if (tail.isNotEmpty()) result.add(false to tail)
+    return if (result.isEmpty()) listOf(false to input) else result
+}
+
+internal fun parseInlineMarkdown(text: String, codeBg: Color): AnnotatedString = buildAnnotatedString {
+    val lines = text.lines()
+    lines.forEachIndexed { lineIndex, rawLine ->
+        val trimmed = rawLine.trimStart()
+        val isHeading = trimmed.startsWith("### ") || trimmed.startsWith("## ") || trimmed.startsWith("# ")
+        val contentLine = when {
+            trimmed.startsWith("### ") -> trimmed.removePrefix("### ")
+            trimmed.startsWith("## ") -> trimmed.removePrefix("## ")
+            trimmed.startsWith("# ") -> trimmed.removePrefix("# ")
+            trimmed.startsWith("- ") -> "• ${trimmed.removePrefix("- ")}"
+            trimmed.startsWith("* ") -> "• ${trimmed.removePrefix("* ")}"
+            else -> rawLine
+        }
+
+        if (isHeading) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                appendInlineSpans(contentLine, codeBg)
+            }
+        } else {
+            appendInlineSpans(contentLine, codeBg)
+        }
+        if (lineIndex < lines.lastIndex) append("\n")
+    }
+}
+
+private fun AnnotatedString.Builder.appendInlineSpans(line: String, codeBg: Color) {
+    val tokenRegex = Regex("""\*\*(.+?)\*\*|`([^`]+)`""")
+    var cursor = 0
+    tokenRegex.findAll(line).forEach { match ->
+        if (match.range.first > cursor) {
+            append(line.substring(cursor, match.range.first))
+        }
+        val boldGroup = match.groupValues[1]
+        val codeGroup = match.groupValues[2]
+        if (boldGroup.isNotEmpty()) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append(boldGroup)
+            }
+        } else if (codeGroup.isNotEmpty()) {
+            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBg)) {
+                append(" $codeGroup ")
+            }
+        }
+        cursor = match.range.last + 1
+    }
+    if (cursor < line.length) {
+        append(line.substring(cursor))
+    }
+}
+
 @Composable
 private fun AiPendingActionCard(
     action: CumtAiPendingAction,
@@ -803,8 +964,8 @@ private fun AiPendingActionCard(
     }
 
     CumtSurfaceCard(
-        cornerRadius = 16.dp,
-        borderColor = accent.contentColor().copy(alpha = 0.35f),
+        cornerRadius = 18.dp,
+        borderColor = accent.contentColor().copy(alpha = 0.30f),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -979,7 +1140,7 @@ internal fun AiMultimodalInputBar(
                     onValueChange = onTextChange,
                     placeholder = { Text("输入文字加/调/查课，或发实验安排图...") },
                     maxLines = 4,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     modifier = Modifier.weight(1f)
                 )
 

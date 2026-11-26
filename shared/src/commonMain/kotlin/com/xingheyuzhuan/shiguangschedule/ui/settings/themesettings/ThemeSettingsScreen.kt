@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,10 +28,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -106,6 +111,12 @@ fun ThemeSettingsScreen(
                     )
                 }
             }
+
+            // 软件全局界面字号调节（独立于课表网格字体）
+            AppFontScaleCard(
+                currentScale = settings.appUiFontScale,
+                onScaleChanged = viewModel::onAppUiFontScaleChanged
+            )
 
             // 动态取色 (利用跨平台 supportsDynamicColor 统一处理)
             if (supportsDynamicColor) {
@@ -265,6 +276,90 @@ private fun DynamicColorToggle(
                 Text(stringResource(Res.string.dynamic_color_desc), style = MaterialTheme.typography.bodySmall)
             }
             Switch(checked = enabled, onCheckedChange = onEnabledChange)
+        }
+    }
+}
+
+@Composable
+private fun AppFontScaleCard(
+    currentScale: Float,
+    onScaleChanged: (Float) -> Unit
+) {
+    val percent = (currentScale * 100f).roundToInt()
+    val presets = listOf(
+        "紧凑" to 0.90f,
+        "标准" to 1.00f,
+        "舒适" to 1.10f,
+        "大字" to 1.20f
+    )
+
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                SectionHeader("软件界面字号")
+                Text(
+                    text = "$percent%",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = "仅调节菜单、设置、矿大校园与 AI 对话等界面字号，不影响周课表网格字体。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = currentScale.coerceIn(0.85f, 1.25f),
+                onValueChange = { raw ->
+                    val stepped = (raw * 20f).roundToInt() / 20f
+                    onScaleChanged(stepped.coerceIn(0.85f, 1.25f))
+                },
+                valueRange = 0.85f..1.25f,
+                steps = 7
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presets.forEach { (label, value) ->
+                    val selected = kotlin.math.abs(currentScale - value) < 0.02f
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onScaleChanged(value) },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = "实时预览 · 矿大时光课表",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "拖动上方滑块可实时感受界面文字大小变化，周课表内的课程卡片字号保持独立不受影响。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

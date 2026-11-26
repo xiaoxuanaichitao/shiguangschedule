@@ -59,6 +59,12 @@ class CumtLocalRepository(
         val KEY_AI_ORB_ENABLED = booleanPreferencesKey("cumt_ai_orb_enabled")
         val KEY_AI_ORB_Y_FRACTION = floatPreferencesKey("cumt_ai_orb_y_fraction")
         val KEY_AI_ORB_ON_RIGHT = booleanPreferencesKey("cumt_ai_orb_on_right")
+        val KEY_AI_ORB_SIZE_DP = floatPreferencesKey("cumt_ai_orb_size_dp")
+        val KEY_AI_ORB_IDLE_ALPHA = floatPreferencesKey("cumt_ai_orb_idle_alpha")
+        val KEY_AI_ORB_AUTO_PEEK = booleanPreferencesKey("cumt_ai_orb_auto_peek")
+        val KEY_AI_ORB_ICON_STYLE = stringPreferencesKey("cumt_ai_orb_icon_style")
+        val KEY_AI_ORB_CUSTOM_IMAGE = stringPreferencesKey("cumt_ai_orb_custom_image")
+        val KEY_AI_QUICK_SHEET_HEIGHT = floatPreferencesKey("cumt_ai_quick_sheet_height")
         val KEY_AI_AUTO_EXEC_WRITES = booleanPreferencesKey("cumt_ai_auto_exec_writes")
 
         val KEY_MCP_ENABLED = booleanPreferencesKey("cumt_mcp_enabled")
@@ -354,6 +360,12 @@ class CumtLocalRepository(
             floatingOrbEnabled = prefs[KEY_AI_ORB_ENABLED] ?: true,
             floatingOrbYFraction = (prefs[KEY_AI_ORB_Y_FRACTION] ?: 0.72f).coerceIn(0.12f, 0.85f),
             floatingOrbOnRight = prefs[KEY_AI_ORB_ON_RIGHT] ?: true,
+            floatingOrbSizeDp = (prefs[KEY_AI_ORB_SIZE_DP] ?: 48f).coerceIn(36f, 68f),
+            floatingOrbIdleAlpha = (prefs[KEY_AI_ORB_IDLE_ALPHA] ?: 0.90f).coerceIn(0.35f, 1.0f),
+            floatingOrbAutoPeek = prefs[KEY_AI_ORB_AUTO_PEEK] ?: true,
+            floatingOrbIconStyle = prefs[KEY_AI_ORB_ICON_STYLE] ?: CumtAiOrbIconStyle.BUBBLES.id,
+            floatingOrbCustomImagePath = prefs[KEY_AI_ORB_CUSTOM_IMAGE].orEmpty(),
+            quickSheetHeightFraction = (prefs[KEY_AI_QUICK_SHEET_HEIGHT] ?: 0.74f).coerceIn(0.55f, 0.92f),
             autoExecuteWrites = prefs[KEY_AI_AUTO_EXEC_WRITES] ?: false
         )
     }
@@ -386,6 +398,24 @@ class CumtLocalRepository(
 
     suspend fun setAiAutoExecuteWrites(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[KEY_AI_AUTO_EXEC_WRITES] = enabled }
+    }
+
+    suspend fun updateFloatingOrbAppearance(
+        sizeDp: Float? = null,
+        idleAlpha: Float? = null,
+        autoPeek: Boolean? = null,
+        iconStyle: CumtAiOrbIconStyle? = null,
+        customImagePath: String? = null,
+        quickSheetHeightFraction: Float? = null
+    ) {
+        dataStore.edit { prefs ->
+            sizeDp?.let { prefs[KEY_AI_ORB_SIZE_DP] = it.coerceIn(36f, 68f) }
+            idleAlpha?.let { prefs[KEY_AI_ORB_IDLE_ALPHA] = it.coerceIn(0.35f, 1.0f) }
+            autoPeek?.let { prefs[KEY_AI_ORB_AUTO_PEEK] = it }
+            iconStyle?.let { prefs[KEY_AI_ORB_ICON_STYLE] = it.id }
+            customImagePath?.let { prefs[KEY_AI_ORB_CUSTOM_IMAGE] = it }
+            quickSheetHeightFraction?.let { prefs[KEY_AI_QUICK_SHEET_HEIGHT] = it.coerceIn(0.55f, 0.92f) }
+        }
     }
 
     // ==================== MCP Server 配置 ====================

@@ -1,9 +1,17 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -78,14 +86,27 @@ enum class CumtAccent(
 fun CumtSurfaceCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    cornerRadius: Dp = 20.dp,
+    cornerRadius: Dp = 22.dp,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
-    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(cornerRadius)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (onClick != null && isPressed) 0.975f else 1f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+        label = "cardScale"
+    )
     val clickModifier = if (onClick != null) {
-        Modifier.clip(shape).clickable(onClick = onClick)
+        Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(shape)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
     } else {
         Modifier
     }
@@ -94,7 +115,7 @@ fun CumtSurfaceCard(
         shape = shape,
         color = containerColor,
         tonalElevation = 1.dp,
-        border = BorderStroke(1.dp, borderColor)
+        border = BorderStroke(0.8.dp, borderColor)
     ) {
         Column(content = content)
     }

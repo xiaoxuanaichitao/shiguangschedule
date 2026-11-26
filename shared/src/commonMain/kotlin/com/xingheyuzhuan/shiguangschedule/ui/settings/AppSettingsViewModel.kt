@@ -177,6 +177,15 @@ class SettingsViewModel(
     }
 
     /**
+     * 更新软件全局界面字号倍率（不影响课表网格内字体）
+     */
+    fun onAppUiFontScaleChanged(scale: Float) {
+        viewModelScope.launch {
+            appSettingsRepository.updateAppUiFontScale(scale)
+        }
+    }
+
+    /**
      * 动态取色开关 (Material You)
      */
     fun onUseDynamicColorChanged(enabled: Boolean) {

@@ -424,6 +424,17 @@ data class CumtAiModelInfo(
     val isReasoning: Boolean = false
 )
 
+enum class CumtAiOrbIconStyle(val id: String, val label: String) {
+    BUBBLES("bubbles", "手绘双气泡"),
+    MASCOT("mascot", "探头小人"),
+    CUSTOM("custom", "自定义图片");
+
+    companion object {
+        fun fromId(id: String?): CumtAiOrbIconStyle =
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: BUBBLES
+    }
+}
+
 @Serializable
 data class CumtAiConfig(
     val providerId: String = CumtAiProviderPreset.SILICONFLOW.id,
@@ -434,6 +445,12 @@ data class CumtAiConfig(
     val floatingOrbEnabled: Boolean = true,
     val floatingOrbYFraction: Float = 0.72f,
     val floatingOrbOnRight: Boolean = true,
+    val floatingOrbSizeDp: Float = 48f,
+    val floatingOrbIdleAlpha: Float = 0.90f,
+    val floatingOrbAutoPeek: Boolean = true,
+    val floatingOrbIconStyle: String = CumtAiOrbIconStyle.BUBBLES.id,
+    val floatingOrbCustomImagePath: String = "",
+    val quickSheetHeightFraction: Float = 0.74f,
     val autoExecuteWrites: Boolean = false
 ) {
     val presetEnum: CumtAiProviderPreset
@@ -441,6 +458,9 @@ data class CumtAiConfig(
 
     val protocolEnum: CumtAiProtocol
         get() = CumtAiProtocol.fromName(protocol)
+
+    val orbIconStyleEnum: CumtAiOrbIconStyle
+        get() = CumtAiOrbIconStyle.fromId(floatingOrbIconStyle)
 }
 
 @Serializable

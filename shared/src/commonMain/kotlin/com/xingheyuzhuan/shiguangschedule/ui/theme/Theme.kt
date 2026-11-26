@@ -42,6 +42,7 @@ fun ShiguangScheduleTheme(
             customLightPrimary = Color(settings.customPrimaryColor.light),
             customDarkPrimary = Color(settings.customPrimaryColor.dark),
             themeMode = settings.themeMode,
+            appUiFontScale = settings.appUiFontScale,
             content = content
         )
     }
@@ -57,6 +58,7 @@ fun ShiguangScheduleTheme(
     customLightPrimary: Color = DefaultThemeColor,
     customDarkPrimary: Color = DefaultThemeColor,
     themeMode: AppThemeMode = AppThemeMode.FOLLOW_SYSTEM,
+    appUiFontScale: Float = 1.0f,
     content: @Composable () -> Unit
 ) {
     val colorScheme = rememberColorScheme(
@@ -73,13 +75,14 @@ fun ShiguangScheduleTheme(
         themeMode = themeMode
     )
 
-    // 忽略系统字体缩放，统一使用默认 1.0 倍字体比例，避免大字体设备布局错位
+    // 忽略手机系统字体缩放，统一使用应用内自定义的界面字号倍率（课表网格内部单独锁定为 1.0f）
     val currentDensity = LocalDensity.current
-    val fixedFontScaleDensity = remember(currentDensity) {
-        currentDensity.withDefaultFontScale()
+    val normalizedScale = appUiFontScale.coerceIn(0.85f, 1.25f)
+    val appFontScaleDensity = remember(currentDensity, normalizedScale) {
+        currentDensity.withAppFontScale(normalizedScale)
     }
 
-    CompositionLocalProvider(LocalDensity provides fixedFontScaleDensity) {
+    CompositionLocalProvider(LocalDensity provides appFontScaleDensity) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
@@ -90,6 +93,11 @@ fun ShiguangScheduleTheme(
 
 internal fun Density.withDefaultFontScale(): Density =
     if (fontScale == 1f) this else Density(density = density, fontScale = 1f)
+
+internal fun Density.withAppFontScale(scale: Float): Density {
+    val clamped = scale.coerceIn(0.85f, 1.25f)
+    return if (fontScale == clamped) this else Density(density = density, fontScale = clamped)
+}
 
 /**
  * 共享的 MaterialKolor 动态配色方案生成函数

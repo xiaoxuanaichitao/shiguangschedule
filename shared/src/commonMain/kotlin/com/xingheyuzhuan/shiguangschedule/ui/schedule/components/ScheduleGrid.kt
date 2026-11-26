@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleModeProto
+import com.xingheyuzhuan.shiguangschedule.ui.theme.withDefaultFontScale
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringArrayResource
 import shiguangschedule.shared.generated.resources.Res
@@ -48,6 +50,10 @@ fun ScheduleGrid(
     modifier: Modifier = Modifier,
     bottomExtraPadding: Dp = 0.dp
 ) {
+    // 课表网格内部强制隔离软件全局界面字号，确保课表方块/节次栏字体仅受「课表样式」独立控制
+    val rawDensity = LocalDensity.current
+    val gridDensity = remember(rawDensity) { rawDensity.withDefaultFontScale() }
+    CompositionLocalProvider(LocalDensity provides gridDensity) {
     Box(modifier.fillMaxSize()) {
         val density = LocalDensity.current
 
@@ -457,5 +463,6 @@ fun ScheduleGrid(
             }
         }
         }
+    }
     }
 }

@@ -2,6 +2,7 @@ package com.xingheyuzhuan.shiguangschedule.cumt
 
 import androidx.compose.ui.unit.Density
 import com.xingheyuzhuan.shiguangschedule.data.model.ScheduleGridStyle
+import com.xingheyuzhuan.shiguangschedule.ui.theme.withAppFontScale
 import com.xingheyuzhuan.shiguangschedule.ui.theme.withDefaultFontScale
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
@@ -898,5 +899,25 @@ class CumtUnitTests {
         assertTrue(snippet.contains("\"url\": \"http://192.168.1.8:8765/mcp\""))
         assertTrue(snippet.contains("\"Authorization\": \"Bearer sg_test123\""))
         assertTrue(snippet.contains("\"shiguang-cumt-schedule\""))
+    }
+
+    @Test
+    fun appUiFontScaleClampsSafelyAndIsolatesScheduleGridDefault() {
+        val customLarge = Density(density = 3.0f, fontScale = 1.6f).withAppFontScale(1.15f)
+        assertEquals(3.0f, customLarge.density)
+        assertEquals(1.15f, customLarge.fontScale)
+
+        // 超出上限与下限时应安全钳制到 [0.85, 1.25]
+        assertEquals(1.25f, Density(2.0f, 1.0f).withAppFontScale(2.0f).fontScale)
+        assertEquals(0.85f, Density(2.0f, 1.0f).withAppFontScale(0.5f).fontScale)
+
+        // 课表网格内部调用 withDefaultFontScale() 应强制回到 1.0f，不受全局 UI 字号影响
+        val isolatedGridDensity = customLarge.withDefaultFontScale()
+        assertEquals(1.0f, isolatedGridDensity.fontScale)
+
+        // 悬浮球图标风格解析
+        assertEquals(CumtAiOrbIconStyle.BUBBLES, CumtAiOrbIconStyle.fromId(null))
+        assertEquals(CumtAiOrbIconStyle.MASCOT, CumtAiOrbIconStyle.fromId("mascot"))
+        assertEquals(CumtAiOrbIconStyle.CUSTOM, CumtAiOrbIconStyle.fromId("custom"))
     }
 }

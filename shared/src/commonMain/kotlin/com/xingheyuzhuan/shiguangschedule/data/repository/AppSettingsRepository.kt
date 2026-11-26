@@ -168,6 +168,12 @@ class AppSettingsRepository(
         }
     }
 
+    suspend fun updateAppUiFontScale(scale: Float) {
+        dataStore.edit { prefs ->
+            prefs[AppSettingsModel.KEY_APP_UI_FONT_SCALE] = scale.coerceIn(0.85f, 1.25f)
+        }
+    }
+
     /**
      * 更新应用设置。
      * 将对象解构并原子化地写入 DataStore。
@@ -190,6 +196,7 @@ class AppSettingsRepository(
             prefs[AppSettingsModel.KEY_BACKGROUND_IMAGE_PATH_LIGHT] = newSettings.backgroundImagePath.light
             prefs[AppSettingsModel.KEY_BACKGROUND_IMAGE_PATH_DARK] = newSettings.backgroundImagePath.dark
             prefs[AppSettingsModel.KEY_DEVELOPER_MODE_ENABLED] = newSettings.developerModeEnabled
+            prefs[AppSettingsModel.KEY_APP_UI_FONT_SCALE] = newSettings.appUiFontScale.coerceIn(0.85f, 1.25f)
         }
     }
 

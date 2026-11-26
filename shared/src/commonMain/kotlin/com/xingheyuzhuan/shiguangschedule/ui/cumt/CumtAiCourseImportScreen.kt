@@ -33,11 +33,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiOrbIconStyle
+import com.xingheyuzhuan.shiguangschedule.ui.components.encodeImageBitmapForAi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.withContext
+import okio.FileSystem
+import okio.Path
+import org.koin.core.annotation.Named
+import shiguangschedule.shared.generated.resources.image_24px
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -100,7 +111,9 @@ class CumtAiCourseImportViewModel(
     private val localRepo: CumtLocalRepository,
     private val aiCourseService: CumtAiCourseService,
     val sessionRepo: CumtAiSessionRepository,
-    val mcpManager: ShiguangMcpServerManager
+    val mcpManager: ShiguangMcpServerManager,
+    private val fileSystem: FileSystem,
+    @Named("FilesDir") private val filesDir: Path
 ) : ViewModel() {
 
     val aiConfig: StateFlow<CumtAiConfig> = localRepo.aiConfigFlow.stateIn(
@@ -203,6 +216,46 @@ class CumtAiCourseImportViewModel(
     fun setAutoExecuteWrites(enabled: Boolean) {
         viewModelScope.launch {
             localRepo.setAiAutoExecuteWrites(enabled)
+        }
+    }
+
+    fun updateOrbAppearance(
+        sizeDp: Float? = null,
+        idleAlpha: Float? = null,
+        autoPeek: Boolean? = null,
+        iconStyle: CumtAiOrbIconStyle? = null,
+        quickSheetHeightFraction: Float? = null
+    ) {
+        viewModelScope.launch {
+            localRepo.updateFloatingOrbAppearance(
+                sizeDp = sizeDp,
+                idleAlpha = idleAlpha,
+                autoPeek = autoPeek,
+                iconStyle = iconStyle,
+                quickSheetHeightFraction = quickSheetHeightFraction
+            )
+        }
+    }
+
+    fun saveCustomOrbIcon(bitmap: ImageBitmap) {
+        viewModelScope.launch {
+            runCatching {
+                val bytes = encodeImageBitmapForAi(bitmap, maxDimension = 512, quality = 90)
+                val targetPath = filesDir.resolve("ai_orb_custom_${kotlin.time.Clock.System.now().toEpochMilliseconds()}.jpg")
+                withContext(Dispatchers.IO) {
+                    if (!fileSystem.exists(filesDir)) {
+                        fileSystem.createDirectories(filesDir)
+                    }
+                    fileSystem.write(targetPath) { write(bytes) }
+                }
+                localRepo.updateFloatingOrbAppearance(
+                    iconStyle = CumtAiOrbIconStyle.CUSTOM,
+                    customImagePath = targetPath.toString()
+                )
+            }.fold(
+                onSuccess = { ToastManager.show("已更新悬浮球自定义图标") },
+                onFailure = { ToastManager.show("保存悬浮球图标失败：${it.message ?: "未知错误"}") }
+            )
         }
     }
 
@@ -842,17 +895,25 @@ private fun AiModelSettingsTabContent(
             }
         }
 
-        // 3. 悬浮球与交互偏好
+        // 3. 悬浮球外观与交互偏好
         item {
+            val orbImagePicker = rememberFileManager(
+                callbacks = FileManagerCallbacks(
+                    onImagePicked = { bmp ->
+                        if (bmp != null) viewModel.saveCustomOrbIcon(bmp)
+                    }
+                )
+            )
             CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CumtSectionHeader(
-                        title = "AI 助手交互偏好",
-                        subtitle = "类似 Notion AI 的全局悬浮球与安全确认策略"
+                        title = "AI 悬浮球与弹窗外观",
+                        subtitle = "自由调节悬浮球图标、大小、贴边半隐与半屏抽屉高度"
                     )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -861,7 +922,7 @@ private fun AiModelSettingsTabContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("全局 AI 悬浮小球", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "在课表、成绩、考试等页面边缘常驻悬浮球，拖拽贴边、单击秒开半屏助手",
+                                "在课表、成绩、考试等页面边缘常驻，拖拽贴边、单击秒开半屏助手",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -871,6 +932,148 @@ private fun AiModelSettingsTabContent(
                             onCheckedChange = viewModel::setFloatingOrbEnabled
                         )
                     }
+
+                    if (aiConfig.floatingOrbEnabled) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        // 实时预览条 + 图标选择
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.size(72.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AiOrbAvatarSurface(
+                                    aiConfig = aiConfig,
+                                    size = aiConfig.floatingOrbSizeDp.coerceIn(36f, 68f).dp
+                                )
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("悬浮球图标风格", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Row(
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    CumtAiOrbIconStyle.entries.forEach { style ->
+                                        val selected = aiConfig.orbIconStyleEnum == style
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = {
+                                                if (style == CumtAiOrbIconStyle.CUSTOM && aiConfig.floatingOrbCustomImagePath.isBlank()) {
+                                                    orbImagePicker.pickImage()
+                                                } else {
+                                                    viewModel.updateOrbAppearance(iconStyle = style)
+                                                }
+                                            },
+                                            label = { Text(style.label) }
+                                        )
+                                    }
+                                }
+                                OutlinedButton(
+                                    onClick = { orbImagePicker.pickImage() },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(vectorResource(Res.drawable.image_24px), contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("从相册自选图标", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+
+                        // 悬浮球尺寸滑块
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("悬浮球大小", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${aiConfig.floatingOrbSizeDp.roundToInt()} dp",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Slider(
+                                value = aiConfig.floatingOrbSizeDp.coerceIn(36f, 68f),
+                                onValueChange = { viewModel.updateOrbAppearance(sizeDp = it.roundToInt().toFloat()) },
+                                valueRange = 36f..68f
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("小巧" to 40f, "标准" to 48f, "醒目" to 58f).forEach { (label, dpVal) ->
+                                    FilterChip(
+                                        selected = kotlin.math.abs(aiConfig.floatingOrbSizeDp - dpVal) < 2f,
+                                        onClick = { viewModel.updateOrbAppearance(sizeDp = dpVal) },
+                                        label = { Text("$label ${dpVal.roundToInt()}") }
+                                    )
+                                }
+                            }
+                        }
+
+                        // 闲置透明度滑块
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("闲置不透明度", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${(aiConfig.floatingOrbIdleAlpha * 100f).roundToInt()}%",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Slider(
+                                value = aiConfig.floatingOrbIdleAlpha.coerceIn(0.35f, 1.0f),
+                                onValueChange = { viewModel.updateOrbAppearance(idleAlpha = it) },
+                                valueRange = 0.35f..1.0f
+                            )
+                        }
+
+                        // 闲置自动半藏贴边开关
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("闲置自动贴边半隐", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "3 秒无操作自动滑入边缘一半，看课表零遮挡，轻触即弹开",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = aiConfig.floatingOrbAutoPeek,
+                                onCheckedChange = { viewModel.updateOrbAppearance(autoPeek = it) }
+                            )
+                        }
+
+                        // 半屏抽屉默认高度
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("悬浮球半屏抽屉高度", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("紧凑 58%" to 0.58f, "标准 74%" to 0.74f, "大窗 90%" to 0.90f).forEach { (label, frac) ->
+                                    FilterChip(
+                                        selected = kotlin.math.abs(aiConfig.quickSheetHeightFraction - frac) < 0.05f,
+                                        onClick = { viewModel.updateOrbAppearance(quickSheetHeightFraction = frac) },
+                                        label = { Text(label) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     Row(
                         modifier = Modifier.fillMaxWidth(),

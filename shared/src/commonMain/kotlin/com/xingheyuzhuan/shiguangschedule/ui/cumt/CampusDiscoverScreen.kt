@@ -1,5 +1,8 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.compose.resources.painterResource
+import shiguangschedule.shared.generated.resources.cumt_campus_banner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -336,33 +343,53 @@ fun CampusDiscoverScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 顶部身份认证渐变 Hero 卡
+            // 顶部南湖镜湖图书馆主题 Hero 认证卡（隐私保护：不展示学号明文，仅展示姓名）
             item {
                 val isBound = profile.username.isNotBlank()
-                CumtHeroGradientCard(
-                    gradientColors = if (isBound) {
-                        listOf(Color(0xFF0E7C86), Color(0xFF14587A))
-                    } else {
-                        listOf(Color(0xFF284B63), Color(0xFF3C6E71))
-                    },
-                    onClick = { onNavigate(Destination.CumtAuth) },
-                    modifier = Modifier.fillMaxWidth()
+                val studentName = profile.name.trim()
+                val cardShape = RoundedCornerShape(24.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(118.dp)
+                        .clip(cardShape)
+                        .clickable { onNavigate(Destination.CumtAuth) }
                 ) {
+                    Image(
+                        painter = painterResource(Res.drawable.cumt_campus_banner),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                    // 仅左侧柔和暗化渐变蒙版，保证白字高对比度同时保留右侧南湖图书馆与镜湖倒影
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    0.0f to Color(0xDE0E3A4D),
+                                    0.56f to Color(0xB30E3A4D),
+                                    1.0f to Color(0x220E3A4D)
+                                )
+                            )
+                    )
                     Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.18f),
-                            modifier = Modifier.size(48.dp)
+                            color = Color.White.copy(alpha = 0.16f),
+                            modifier = Modifier.size(46.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     vectorResource(Res.drawable.account_circle_24px),
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                         }
@@ -373,11 +400,7 @@ fun CampusDiscoverScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = if (isBound) {
-                                        profile.name.ifBlank { greeting }
-                                    } else {
-                                        greeting
-                                    },
+                                    text = greeting,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White,
@@ -391,15 +414,18 @@ fun CampusDiscoverScreen(
                                     dotColor = if (isBound) Color(0xFF7BE0B2) else Color(0xFFFFCA73)
                                 )
                             }
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                text = if (isBound) {
-                                    "学号 ${profile.username} · 本地密钥加密直连官服"
-                                } else {
-                                    "绑定矿大统一身份认证，解锁一卡通 / 图书馆 / 自动填表"
+                                text = when {
+                                    isBound && studentName.isNotBlank() ->
+                                        "$studentName · 统一身份认证已就绪"
+                                    isBound ->
+                                        "统一身份认证已就绪 · 本地加密直连官服"
+                                    else ->
+                                        "绑定矿大统一身份认证，解锁一卡通 / 图书馆 / 自动填表"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.86f),
+                                color = Color.White.copy(alpha = 0.90f),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -408,7 +434,7 @@ fun CampusDiscoverScreen(
                         Icon(
                             vectorResource(Res.drawable.chevron_right_24px),
                             contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.85f)
+                            tint = Color.White.copy(alpha = 0.88f)
                         )
                     }
                 }

@@ -823,4 +823,80 @@ class CumtUnitTests {
         assertEquals("周六", CumtParsers.formatDayOfWeekLabel(6))
         assertEquals("周日", CumtParsers.formatDayOfWeekLabel(7))
     }
+
+    @Test
+    fun aiModelAutoDiscoveryParsesOpenAiAndGeminiAndFiltersNonChatModels() {
+        assertEquals(
+            "https://api.siliconflow.cn/v1/models",
+            CumtAiCourseService.buildOpenAiModelsEndpoint("https://api.siliconflow.cn/v1/")
+        )
+        assertEquals(
+            "https://api.openai.com/v1/models",
+            CumtAiCourseService.buildOpenAiModelsEndpoint("https://api.openai.com/v1/chat/completions")
+        )
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=100",
+            CumtAiCourseService.buildGeminiModelsEndpoint("https://generativelanguage.googleapis.com/v1beta/")
+        )
+
+        val openAiModelsJson = """
+            {
+              "data": [
+                {"id": "BAAI/bge-large-zh-v1.5"},
+                {"id": "text-embedding-3-small"},
+                {"id": "deepseek-ai/DeepSeek-R1"},
+                {"id": "Qwen/Qwen2.5-VL-72B-Instruct"},
+                {"id": "gpt-4o-mini"}
+              ]
+            }
+        """.trimIndent()
+        val openAiModels = CumtAiCourseService.parseOpenAiModelsJson(openAiModelsJson)
+        assertEquals(3, openAiModels.size)
+        // 视觉模型应排在前面
+        assertTrue(openAiModels[0].supportsVision)
+        assertTrue(openAiModels.any { it.id == "Qwen/Qwen2.5-VL-72B-Instruct" && it.supportsVision })
+        assertTrue(openAiModels.any { it.id == "deepseek-ai/DeepSeek-R1" && it.isReasoning && !it.supportsVision })
+
+        val geminiModelsJson = """
+            {
+              "models": [
+                {
+                  "name": "models/text-embedding-004",
+                  "displayName": "Text Embedding 004",
+                  "supportedGenerationMethods": ["embedContent"]
+                },
+                {
+                  "name": "models/gemini-2.5-flash",
+                  "displayName": "Gemini 2.5 Flash",
+                  "supportedGenerationMethods": ["generateContent", "countTokens"]
+                },
+                {
+                  "name": "models/gemini-2.5-pro",
+                  "displayName": "Gemini 2.5 Pro",
+                  "supportedGenerationMethods": ["generateContent"]
+                }
+              ]
+            }
+        """.trimIndent()
+        val geminiModels = CumtAiCourseService.parseGeminiModelsJson(geminiModelsJson)
+        assertEquals(2, geminiModels.size)
+        assertEquals("gemini-2.5-flash", geminiModels[0].id)
+        assertTrue(geminiModels.all { it.supportsVision && it.supportsTools })
+    }
+
+    @Test
+    fun mcpToolDescriptorsAndClientConfigSnippetAreValid() {
+        assertEquals(9, ScheduleToolEngine.TOOL_DESCRIPTORS.size)
+        assertEquals(3, ScheduleToolEngine.RESOURCE_DESCRIPTORS.size)
+        val writeTools = ScheduleToolEngine.TOOL_DESCRIPTORS.filter { it.isWrite }.map { it.name }.toSet()
+        assertEquals(
+            setOf("add_courses", "update_course", "reschedule_course", "delete_courses", "update_table_config"),
+            writeTools
+        )
+
+        val snippet = ShiguangMcpDispatcher.buildClientConfigSnippet("192.168.1.8", 8765, "sg_test123")
+        assertTrue(snippet.contains("\"url\": \"http://192.168.1.8:8765/mcp\""))
+        assertTrue(snippet.contains("\"Authorization\": \"Bearer sg_test123\""))
+        assertTrue(snippet.contains("\"shiguang-cumt-schedule\""))
+    }
 }

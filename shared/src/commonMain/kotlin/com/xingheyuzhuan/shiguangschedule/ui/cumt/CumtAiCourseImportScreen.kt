@@ -1,9 +1,6 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,10 +22,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -51,10 +48,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -66,27 +64,22 @@ import androidx.lifecycle.viewModelScope
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiConfig
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiCourseService
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiModelInfo
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiProtocol
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiProviderPreset
-import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiRecognizedCourse
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiSessionRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
-import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
-import com.xingheyuzhuan.shiguangschedule.data.db.main.Course
-import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTable
-import com.xingheyuzhuan.shiguangschedule.data.repository.AppSettingsRepository
-import com.xingheyuzhuan.shiguangschedule.data.repository.CourseTableRepository
-import com.xingheyuzhuan.shiguangschedule.data.repository.StyleSettingsRepository
-import com.xingheyuzhuan.shiguangschedule.data.sync.WidgetDataSynchronizer
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtMcpAuditEntry
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtMcpConfig
+import com.xingheyuzhuan.shiguangschedule.cumt.ShiguangMcpDispatcher
+import com.xingheyuzhuan.shiguangschedule.cumt.ShiguangMcpServerManager
 import com.xingheyuzhuan.shiguangschedule.tool.FileManagerCallbacks
 import com.xingheyuzhuan.shiguangschedule.tool.rememberFileManager
-import com.xingheyuzhuan.shiguangschedule.ui.components.CourseTablePickerDialog
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
-import com.xingheyuzhuan.shiguangschedule.ui.components.encodeImageBitmapForAi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.vectorResource
@@ -94,31 +87,20 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.bolt_24px
-import shiguangschedule.shared.generated.resources.check_circle_24px
+import shiguangschedule.shared.generated.resources.check_24px
+import shiguangschedule.shared.generated.resources.content_copy_24px
 import shiguangschedule.shared.generated.resources.delete_24px
-import shiguangschedule.shared.generated.resources.done_all_24px
-import shiguangschedule.shared.generated.resources.edit_24px
-import shiguangschedule.shared.generated.resources.image_24px
 import shiguangschedule.shared.generated.resources.info_24px
-import shiguangschedule.shared.generated.resources.location_on_24px
-import shiguangschedule.shared.generated.resources.person_24px
+import shiguangschedule.shared.generated.resources.refresh_24px
 import shiguangschedule.shared.generated.resources.save_24px
-import shiguangschedule.shared.generated.resources.schedule_24px
-import shiguangschedule.shared.generated.resources.tune_24px
-import shiguangschedule.shared.generated.resources.upload_24px
-import kotlin.math.abs
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
+import shiguangschedule.shared.generated.resources.search_24px
 
-@OptIn(ExperimentalUuidApi::class)
 @KoinViewModel
 class CumtAiCourseImportViewModel(
     private val localRepo: CumtLocalRepository,
     private val aiCourseService: CumtAiCourseService,
-    private val courseTableRepository: CourseTableRepository,
-    private val appSettingsRepository: AppSettingsRepository,
-    private val styleSettingsRepository: StyleSettingsRepository,
-    private val widgetDataSynchronizer: WidgetDataSynchronizer
+    val sessionRepo: CumtAiSessionRepository,
+    val mcpManager: ShiguangMcpServerManager
 ) : ViewModel() {
 
     val aiConfig: StateFlow<CumtAiConfig> = localRepo.aiConfigFlow.stateIn(
@@ -127,38 +109,31 @@ class CumtAiCourseImportViewModel(
         initialValue = CumtAiConfig()
     )
 
+    val cachedModels: StateFlow<List<CumtAiModelInfo>> = localRepo.cachedAiModelsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val mcpConfig: StateFlow<CumtMcpConfig> = localRepo.mcpConfigFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CumtMcpConfig()
+    )
+
     private val _savedApiKey = MutableStateFlow("")
     val savedApiKey: StateFlow<String> = _savedApiKey.asStateFlow()
-
-    private val _recognizedCourses = MutableStateFlow<List<CumtAiRecognizedCourse>>(emptyList())
-    val recognizedCourses: StateFlow<List<CumtAiRecognizedCourse>> = _recognizedCourses.asStateFlow()
-
-    private val _isRecognizing = MutableStateFlow(false)
-    val isRecognizing: StateFlow<Boolean> = _isRecognizing.asStateFlow()
 
     private val _isTestingConnection = MutableStateFlow(false)
     val isTestingConnection: StateFlow<Boolean> = _isTestingConnection.asStateFlow()
 
-    private val _isImporting = MutableStateFlow(false)
-    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
-
     private val _testStatusMessage = MutableStateFlow<String?>(null)
     val testStatusMessage: StateFlow<String?> = _testStatusMessage.asStateFlow()
-
-    private val _addLabPrefix = MutableStateFlow(false)
-    val addLabPrefix: StateFlow<Boolean> = _addLabPrefix.asStateFlow()
 
     init {
         viewModelScope.launch {
             _savedApiKey.value = localRepo.getSavedAiApiKey()
         }
-    }
-
-    fun setAddLabPrefix(enabled: Boolean) {
-        _addLabPrefix.value = enabled
     }
 
     fun saveApiConfig(
@@ -167,6 +142,7 @@ class CumtAiCourseImportViewModel(
         model: String,
         protocol: CumtAiProtocol,
         apiKey: String,
+        autoDiscoverModels: Boolean = true,
         onSaved: () -> Unit = {}
     ) {
         val cleanKey = apiKey.trim()
@@ -174,10 +150,6 @@ class CumtAiCourseImportViewModel(
         val cleanModel = model.trim()
         if (cleanBase.isBlank()) {
             ToastManager.show("请填写 API Base URL")
-            return
-        }
-        if (cleanModel.isBlank()) {
-            ToastManager.show("请填写模型名称")
             return
         }
         viewModelScope.launch {
@@ -191,6 +163,22 @@ class CumtAiCourseImportViewModel(
             _savedApiKey.value = cleanKey
             _testStatusMessage.value = null
             ToastManager.show(if (cleanKey.isNotEmpty()) "API Key 配置已加密保存" else "已保存接口配置（未填 Key）")
+            if (autoDiscoverModels && cleanKey.isNotEmpty()) {
+                sessionRepo.refreshAvailableModels(protocol, cleanBase, cleanKey) { models ->
+                    // 若用户尚未选填模型，自动选中第一个推荐模型
+                    if (cleanModel.isBlank() && models.isNotEmpty()) {
+                        viewModelScope.launch {
+                            localRepo.saveAiConfig(
+                                providerId = providerId,
+                                baseUrl = cleanBase,
+                                model = models.first().id,
+                                protocol = protocol,
+                                apiKey = cleanKey
+                            )
+                        }
+                    }
+                }
+            }
             onSaved()
         }
     }
@@ -198,9 +186,23 @@ class CumtAiCourseImportViewModel(
     fun clearApiKey() {
         viewModelScope.launch {
             localRepo.clearAiApiKey()
+            localRepo.saveCachedAiModels(emptyList())
             _savedApiKey.value = ""
             _testStatusMessage.value = null
             ToastManager.show("已清除本地保存的 API Key")
+        }
+    }
+
+    fun setFloatingOrbEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            localRepo.setFloatingOrbEnabled(enabled)
+            ToastManager.show(if (enabled) "已开启全局 AI 悬浮小球" else "已隐藏全局 AI 悬浮小球")
+        }
+    }
+
+    fun setAutoExecuteWrites(enabled: Boolean) {
+        viewModelScope.launch {
+            localRepo.setAiAutoExecuteWrites(enabled)
         }
     }
 
@@ -236,183 +238,6 @@ class CumtAiCourseImportViewModel(
             _isTestingConnection.value = false
         }
     }
-
-    fun recognizeImage(bitmap: ImageBitmap, userHint: String) {
-        if (_isRecognizing.value) return
-        viewModelScope.launch {
-            val currentConfig = localRepo.aiConfigFlow.first()
-            val apiKey = localRepo.getSavedAiApiKey()
-            if (apiKey.isBlank()) {
-                _errorMessage.value = "请先在上方配置并保存你的 AI API Key"
-                ToastManager.show("请先配置并保存 API Key")
-                return@launch
-            }
-            _isRecognizing.value = true
-            _errorMessage.value = null
-            try {
-                val jpegBytes = encodeImageBitmapForAi(bitmap, maxDimension = 1920, quality = 85)
-                aiCourseService.recognizeCoursesFromImage(
-                    config = currentConfig,
-                    apiKey = apiKey,
-                    imageBytes = jpegBytes,
-                    mimeType = "image/jpeg",
-                    userHint = userHint
-                ).fold(
-                    onSuccess = { list ->
-                        _recognizedCourses.value = list
-                        ToastManager.show("AI 识别完成，共提取 ${list.size} 条课程安排")
-                    },
-                    onFailure = { err ->
-                        val msg = err.message ?: "识别失败，请稍后重试"
-                        _errorMessage.value = msg
-                        ToastManager.show(msg)
-                    }
-                )
-            } catch (e: Exception) {
-                val msg = "图片处理失败：${e.message ?: "未知错误"}"
-                _errorMessage.value = msg
-                ToastManager.show(msg)
-            } finally {
-                _isRecognizing.value = false
-            }
-        }
-    }
-
-    fun toggleSelection(id: String) {
-        _recognizedCourses.value = _recognizedCourses.value.map { item ->
-            if (item.id == id) item.copy(selected = !item.selected) else item
-        }
-    }
-
-    fun toggleSelectAll() {
-        val list = _recognizedCourses.value
-        val allSelected = list.isNotEmpty() && list.all { it.selected }
-        _recognizedCourses.value = list.map { it.copy(selected = !allSelected) }
-    }
-
-    fun updateCourse(updated: CumtAiRecognizedCourse) {
-        _recognizedCourses.value = _recognizedCourses.value.map { item ->
-            if (item.id == updated.id) updated else item
-        }
-    }
-
-    fun removeCourse(id: String) {
-        _recognizedCourses.value = _recognizedCourses.value.filterNot { it.id == id }
-    }
-
-    fun clearRecognizedResults() {
-        _recognizedCourses.value = emptyList()
-        _errorMessage.value = null
-    }
-
-    fun appendImportToTable(
-        targetTable: CourseTable,
-        onImportSuccess: () -> Unit
-    ) {
-        if (_isImporting.value) return
-        val selectedItems = _recognizedCourses.value.filter { it.selected }
-        if (selectedItems.isEmpty()) {
-            ToastManager.show("请至少勾选 1 条要导入的课程")
-            return
-        }
-
-        viewModelScope.launch {
-            _isImporting.value = true
-            try {
-                val existingCourses = courseTableRepository
-                    .getCoursesWithWeeksByTableId(targetTable.id)
-                    .first()
-                val colorCount = styleSettingsRepository.styleFlow.first()
-                    .courseColorMaps
-                    .size
-                    .coerceAtLeast(1)
-
-                val existingNameColorMap = existingCourses.associate {
-                    it.course.name to it.course.colorInt
-                }
-                val newNameColorMap = mutableMapOf<String, Int>()
-                val prefixEnabled = _addLabPrefix.value
-
-                var maxWeekNeeded = 0
-                var hasWeekendCourse = false
-                var importedCount = 0
-
-                for (item in selectedItems) {
-                    val validWeeks = item.weeks.filter { it in 1..30 }.distinct().sorted()
-                    if (validWeeks.isEmpty()) continue
-
-                    val finalName = if (prefixEnabled && !item.name.startsWith("[实验]")) {
-                        "[实验] ${item.name}"
-                    } else {
-                        item.name
-                    }
-
-                    val colorIndex = existingNameColorMap[finalName]
-                        ?: newNameColorMap.getOrPut(finalName) {
-                            abs(finalName.hashCode()) % colorCount
-                        }
-
-                    val remarkText = item.remark.ifBlank { "AI 识图导入" }
-                    val course = Course(
-                        id = Uuid.random().toString(),
-                        courseTableId = targetTable.id,
-                        name = finalName,
-                        teacher = item.teacher,
-                        position = item.position,
-                        day = item.day.coerceIn(1, 7),
-                        startSection = item.startSection.coerceIn(1, 20),
-                        endSection = item.endSection.coerceIn(item.startSection.coerceIn(1, 20), 20),
-                        isCustomTime = false,
-                        customStartTime = null,
-                        customEndTime = null,
-                        colorInt = colorIndex,
-                        remark = remarkText,
-                        credit = null
-                    )
-
-                    courseTableRepository.upsertCourse(course, validWeeks)
-                    importedCount++
-                    maxWeekNeeded = maxOf(maxWeekNeeded, validWeeks.max())
-                    if (course.day >= 6) {
-                        hasWeekendCourse = true
-                    }
-                }
-
-                // 自动适配周末显示与总周数，避免周末实验课被隐藏
-                val tableConfig = appSettingsRepository.getCourseConfigOnce(targetTable.id)
-                var enabledWeekendNotice = false
-                var expandedWeeksNotice: Int? = null
-                if (tableConfig != null) {
-                    val needWeekends = hasWeekendCourse && !tableConfig.showWeekends
-                    val needExpandWeeks = maxWeekNeeded > tableConfig.semesterTotalWeeks
-                    if (needWeekends || needExpandWeeks) {
-                        appSettingsRepository.insertOrUpdateCourseConfig(
-                            tableConfig.copy(
-                                showWeekends = tableConfig.showWeekends || needWeekends,
-                                semesterTotalWeeks = if (needExpandWeeks) maxWeekNeeded else tableConfig.semesterTotalWeeks
-                            )
-                        )
-                        enabledWeekendNotice = needWeekends
-                        if (needExpandWeeks) expandedWeeksNotice = maxWeekNeeded
-                    }
-                }
-
-                widgetDataSynchronizer.syncNow()
-
-                val extras = buildList {
-                    if (enabledWeekendNotice) add("已自动开启周末显示")
-                    if (expandedWeeksNotice != null) add("总周数已扩展至 $expandedWeeksNotice 周")
-                }.joinToString("，")
-                val suffix = if (extras.isNotEmpty()) "（$extras）" else ""
-                ToastManager.show("已追加导入 $importedCount 条课程到「${targetTable.name}」$suffix")
-                onImportSuccess()
-            } catch (e: Exception) {
-                ToastManager.show("导入失败：${e.message ?: "未知错误"}")
-            } finally {
-                _isImporting.value = false
-            }
-        }
-    }
 }
 
 @Composable
@@ -423,939 +248,1019 @@ fun CumtAiCourseImportScreen(
 ) {
     val aiConfig by viewModel.aiConfig.collectAsState()
     val savedApiKey by viewModel.savedApiKey.collectAsState()
-    val recognizedCourses by viewModel.recognizedCourses.collectAsState()
-    val isRecognizing by viewModel.isRecognizing.collectAsState()
+    val cachedModels by viewModel.cachedModels.collectAsState()
+    val mcpConfig by viewModel.mcpConfig.collectAsState()
+
+    val messages by viewModel.sessionRepo.messages.collectAsState()
+    val isBusy by viewModel.sessionRepo.isBusy.collectAsState()
+    val isFetchingModels by viewModel.sessionRepo.isFetchingModels.collectAsState()
+    val modelFetchNotice by viewModel.sessionRepo.modelFetchNotice.collectAsState()
     val isTestingConnection by viewModel.isTestingConnection.collectAsState()
-    val isImporting by viewModel.isImporting.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     val testStatusMessage by viewModel.testStatusMessage.collectAsState()
-    val addLabPrefix by viewModel.addLabPrefix.collectAsState()
 
-    var selectedImage by remember { mutableStateOf<ImageBitmap?>(null) }
-    var userHint by remember { mutableStateOf("") }
-    var configExpanded by remember { mutableStateOf(false) }
-    var initializedExpand by remember { mutableStateOf(false) }
+    val mcpRunning by viewModel.mcpManager.isRunning.collectAsState()
+    val mcpEndpoint by viewModel.mcpManager.activeEndpoint.collectAsState()
+    val mcpError by viewModel.mcpManager.lastError.collectAsState()
+    val lanAddresses by viewModel.mcpManager.lanAddresses.collectAsState()
+    val auditLogs by viewModel.mcpManager.dispatcher.auditLogs.collectAsState()
 
-    // 表单编辑草稿态
-    var draftProviderId by remember { mutableStateOf(aiConfig.providerId) }
-    var draftBaseUrl by remember { mutableStateOf(aiConfig.baseUrl) }
-    var draftModel by remember { mutableStateOf(aiConfig.model) }
-    var draftProtocol by remember { mutableStateOf(aiConfig.protocolEnum) }
-    var draftApiKey by remember { mutableStateOf("") }
-    var showApiKeyPlain by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var initializedTab by remember { mutableStateOf(false) }
 
-    var editingCourse by remember { mutableStateOf<CumtAiRecognizedCourse?>(null) }
-    var showTablePicker by remember { mutableStateOf(false) }
-
-    LaunchedEffect(aiConfig, savedApiKey) {
-        draftProviderId = aiConfig.providerId
-        draftBaseUrl = aiConfig.baseUrl
-        draftModel = aiConfig.model
-        draftProtocol = aiConfig.protocolEnum
-        draftApiKey = savedApiKey
-        if (!initializedExpand) {
-            configExpanded = !aiConfig.hasApiKey
-            initializedExpand = true
+    LaunchedEffect(aiConfig.hasApiKey) {
+        viewModel.sessionRepo.markRepliesRead()
+        if (!initializedTab) {
+            initializedTab = true
+            // 首次进入若尚未配置 Key，自动跳到配置页方便填入
+            if (!aiConfig.hasApiKey) selectedTab = 1
         }
     }
-
-    val fileManager = rememberFileManager(
-        callbacks = FileManagerCallbacks(
-            onImagePicked = { bitmap ->
-                if (bitmap != null) {
-                    selectedImage = bitmap
-                    viewModel.clearRecognizedResults()
-                }
-            }
-        )
-    )
-
-    val selectedCount = recognizedCourses.count { it.selected }
 
     Scaffold(
         topBar = {
             CumtTopBar(
-                title = "AI 识图导实验 / 课表",
-                subtitle = "自定义 API Key · 识别实验安排并追加导入",
+                title = "矿大 AI 助手",
+                subtitle = when (selectedTab) {
+                    0 -> "${aiConfig.presetEnum.displayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                    1 -> "自动识别可用模型 · 悬浮球与 Key 设置"
+                    else -> if (mcpRunning) "MCP 运行中 · $mcpEndpoint" else "MCP 本地服务（外部 Agent 读写接口）"
+                },
                 onBack = onBack,
                 actions = {
-                    TextButton(onClick = { configExpanded = !configExpanded }) {
-                        Icon(
-                            vectorResource(Res.drawable.tune_24px),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (configExpanded) "收起 Key" else "API Key")
+                    if (selectedTab == 0 && messages.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.sessionRepo.clearConversation() }) {
+                            Icon(
+                                vectorResource(Res.drawable.delete_24px),
+                                contentDescription = "清空对话"
+                            )
+                        }
                     }
                 }
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(paddingValues)
+                .imePadding()
         ) {
-            // 1. API Key 状态与配置卡
-            item {
-                CumtSurfaceCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    borderColor = if (aiConfig.hasApiKey) {
-                        CumtAccent.EMERALD.contentColor().copy(alpha = 0.28f)
-                    } else {
-                        CumtAccent.AMBER.contentColor().copy(alpha = 0.35f)
-                    }
+            CumtSegmentedBar(
+                options = listOf("AI 对话", "模型与 Key", "MCP 接口"),
+                selectedIndex = selectedTab,
+                onSelect = { selectedTab = it },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+
+            when (selectedTab) {
+                0 -> AiChatTabContent(
+                    aiConfig = aiConfig,
+                    messages = messages,
+                    isBusy = isBusy,
+                    sessionRepo = viewModel.sessionRepo,
+                    onJumpToSettings = { selectedTab = 1 },
+                    modifier = Modifier.weight(1f)
+                )
+                1 -> AiModelSettingsTabContent(
+                    aiConfig = aiConfig,
+                    savedApiKey = savedApiKey,
+                    cachedModels = cachedModels,
+                    isFetchingModels = isFetchingModels,
+                    modelFetchNotice = modelFetchNotice,
+                    isTestingConnection = isTestingConnection,
+                    testStatusMessage = testStatusMessage,
+                    viewModel = viewModel,
+                    onJumpToChat = { selectedTab = 0 },
+                    modifier = Modifier.weight(1f)
+                )
+                else -> AiMcpServerTabContent(
+                    mcpConfig = mcpConfig,
+                    isSupported = viewModel.mcpManager.isSupported,
+                    isRunning = mcpRunning,
+                    activeEndpoint = mcpEndpoint,
+                    lastError = mcpError,
+                    lanAddresses = lanAddresses,
+                    auditLogs = auditLogs,
+                    mcpManager = viewModel.mcpManager,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiChatTabContent(
+    aiConfig: CumtAiConfig,
+    messages: List<com.xingheyuzhuan.shiguangschedule.cumt.CumtAiChatMessage>,
+    isBusy: Boolean,
+    sessionRepo: CumtAiSessionRepository,
+    onJumpToSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var inputText by remember { mutableStateOf("") }
+    var attachedImage by remember { mutableStateOf<ImageBitmap?>(null) }
+
+    val fileManager = rememberFileManager(
+        callbacks = FileManagerCallbacks(
+            onImagePicked = { bmp ->
+                if (bmp != null) attachedImage = bmp
+            }
+        )
+    )
+
+    Column(modifier = modifier.fillMaxSize()) {
+        if (!aiConfig.hasApiKey) {
+            Surface(
+                onClick = onJumpToSettings,
+                shape = RoundedCornerShape(14.dp),
+                color = CumtAccent.AMBER.containerColor(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { configExpanded = !configExpanded },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                CumtIconBadge(
-                                    icon = Res.drawable.bolt_24px,
-                                    accent = if (aiConfig.hasApiKey) CumtAccent.EMERALD else CumtAccent.AMBER,
-                                    size = 42.dp,
-                                    iconSize = 21.dp
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "AI 视觉接口配置",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        CumtStatusPill(
-                                            text = if (aiConfig.hasApiKey) "已配置 Key" else "未配置 Key",
-                                            containerColor = if (aiConfig.hasApiKey) {
-                                                CumtAccent.EMERALD.containerColor()
-                                            } else {
-                                                CumtAccent.AMBER.containerColor()
-                                            },
-                                            contentColor = if (aiConfig.hasApiKey) {
-                                                CumtAccent.EMERALD.contentColor()
-                                            } else {
-                                                CumtAccent.AMBER.contentColor()
-                                            }
-                                        )
-                                    }
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        text = "${aiConfig.presetEnum.displayName} · ${aiConfig.model.ifBlank { "未填写模型" }}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                            Text(
-                                text = if (configExpanded) "收起" else "配置",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        AnimatedVisibility(visible = configExpanded) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                )
-                                Text(
-                                    text = "快速选择服务商预设（点击自动填充端点与视觉模型）",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    CumtAiProviderPreset.entries.forEach { preset ->
-                                        val selected = draftProviderId == preset.id
-                                        FilterChip(
-                                            selected = selected,
-                                            onClick = {
-                                                draftProviderId = preset.id
-                                                draftProtocol = preset.protocol
-                                                if (preset != CumtAiProviderPreset.CUSTOM) {
-                                                    draftBaseUrl = preset.defaultBaseUrl
-                                                    draftModel = preset.defaultModel
-                                                }
-                                            },
-                                            label = { Text(preset.displayName) }
-                                        )
-                                    }
-                                }
-
-                                val activePreset = CumtAiProviderPreset.fromId(draftProviderId)
-                                Text(
-                                    text = activePreset.hint,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-
-                                CumtSegmentedBar(
-                                    options = CumtAiProtocol.entries.map { it.displayName },
-                                    selectedIndex = CumtAiProtocol.entries.indexOf(draftProtocol).coerceAtLeast(0),
-                                    onSelect = { idx ->
-                                        draftProtocol = CumtAiProtocol.entries[idx]
-                                    }
-                                )
-
-                                OutlinedTextField(
-                                    value = draftApiKey,
-                                    onValueChange = { draftApiKey = it },
-                                    label = { Text("API Key（本地加密存储，不上传第三方）") },
-                                    placeholder = { Text("例如 sk-xxxx 或 AIzaSy...") },
-                                    singleLine = true,
-                                    visualTransformation = if (showApiKeyPlain) {
-                                        VisualTransformation.None
-                                    } else {
-                                        PasswordVisualTransformation()
-                                    },
-                                    trailingIcon = {
-                                        TextButton(onClick = { showApiKeyPlain = !showApiKeyPlain }) {
-                                            Text(if (showApiKeyPlain) "隐藏" else "显示")
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                OutlinedTextField(
-                                    value = draftBaseUrl,
-                                    onValueChange = { draftBaseUrl = it },
-                                    label = { Text("API Base URL") },
-                                    placeholder = { Text("https://api.siliconflow.cn/v1") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                OutlinedTextField(
-                                    value = draftModel,
-                                    onValueChange = { draftModel = it },
-                                    label = { Text("视觉模型名称 (需支持图片输入)") },
-                                    placeholder = { Text("Qwen/Qwen2.5-VL-72B-Instruct") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                if (!testStatusMessage.isNullOrBlank()) {
-                                    val isFail = testStatusMessage!!.startsWith("失败")
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = if (isFail) {
-                                            CumtAccent.CORAL.containerColor()
-                                        } else {
-                                            CumtAccent.EMERALD.containerColor()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = testStatusMessage!!,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = if (isFail) {
-                                                CumtAccent.CORAL.contentColor()
-                                            } else {
-                                                CumtAccent.EMERALD.contentColor()
-                                            },
-                                            modifier = Modifier.padding(10.dp)
-                                        )
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            viewModel.testConnection(
-                                                providerId = draftProviderId,
-                                                baseUrl = draftBaseUrl,
-                                                model = draftModel,
-                                                protocol = draftProtocol,
-                                                apiKey = draftApiKey
-                                            )
-                                        },
-                                        enabled = !isTestingConnection && draftApiKey.isNotBlank(),
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        if (isTestingConnection) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(16.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                            Spacer(Modifier.width(6.dp))
-                                        }
-                                        Text("测试连通")
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            viewModel.saveApiConfig(
-                                                providerId = draftProviderId,
-                                                baseUrl = draftBaseUrl,
-                                                model = draftModel,
-                                                protocol = draftProtocol,
-                                                apiKey = draftApiKey,
-                                                onSaved = {
-                                                    if (draftApiKey.isNotBlank()) {
-                                                        configExpanded = false
-                                                    }
-                                                }
-                                            )
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Icon(
-                                            vectorResource(Res.drawable.save_24px),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("保存配置")
-                                    }
-                                }
-
-                                if (aiConfig.hasApiKey) {
-                                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                                        TextButton(onClick = {
-                                            viewModel.clearApiKey()
-                                            draftApiKey = ""
-                                        }) {
-                                            Text("清除已保存的 API Key", color = MaterialTheme.colorScheme.error)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Text(
+                        text = "尚未配置 API Key，点击前往「模型与 Key」配置并自动拉取模型",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CumtAccent.AMBER.contentColor(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "去配置 ›",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = CumtAccent.AMBER.contentColor()
+                    )
                 }
             }
+        }
 
-            // 2. 选择实验安排/课表图片卡
-            item {
-                CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+        // 场景快捷指令行
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SuggestionChip(
+                onClick = { fileManager.pickImage() },
+                label = { Text("📷 上传实验安排图") }
+            )
+            SuggestionChip(
+                onClick = {
+                    inputText = "帮我在第11周周六第1-2节加一门《二阶系统实验》，地点信控-A205，老师周晨"
+                },
+                label = { Text("✏️ 文字加课") }
+            )
+            SuggestionChip(
+                onClick = {
+                    inputText = "把我本周三的课程调到第13周周六5-6节"
+                },
+                label = { Text("🔄 文字调课") }
+            )
+            SuggestionChip(
+                onClick = {
+                    sessionRepo.sendUserMessage(
+                        text = "帮我查一下本周哪天下午没课可以约实验？",
+                        contextHint = "全屏 AI 助手页面",
+                        onNeedApiKey = onJumpToSettings
+                    )
+                },
+                label = { Text("🕒 查本周空课") }
+            )
+            SuggestionChip(
+                onClick = {
+                    sessionRepo.sendUserMessage(
+                        text = "帮我汇总一下最近的考试倒计时和加权绩点情况",
+                        contextHint = "全屏 AI 助手页面",
+                        onNeedApiKey = onJumpToSettings
+                    )
+                },
+                label = { Text("📊 查考表与绩点") }
+            )
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+            AiChatMessageList(
+                messages = messages,
+                isBusy = isBusy,
+                emptyTitle = "矿大全能 AI 课表助手",
+                emptySubtitle = "支持自然语言加课/调课/停课/删课、查空课/考试/绩点，也支持直接传实验安排表图片一键解析导入。",
+                onConfirmAction = sessionRepo::confirmPendingAction,
+                onRejectAction = sessionRepo::rejectPendingAction,
+                onConfirmAllActions = sessionRepo::confirmAllPendingActions
+            )
+        }
+
+        AiMultimodalInputBar(
+            text = inputText,
+            onTextChange = { inputText = it },
+            attachedImage = attachedImage,
+            onPickImage = { fileManager.pickImage() },
+            onRemoveImage = { attachedImage = null },
+            isBusy = isBusy,
+            onSend = {
+                val txt = inputText
+                val img = attachedImage
+                inputText = ""
+                attachedImage = null
+                sessionRepo.sendUserMessage(
+                    text = txt,
+                    image = img,
+                    contextHint = "全屏 AI 助手页面",
+                    onNeedApiKey = onJumpToSettings
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun AiModelSettingsTabContent(
+    aiConfig: CumtAiConfig,
+    savedApiKey: String,
+    cachedModels: List<CumtAiModelInfo>,
+    isFetchingModels: Boolean,
+    modelFetchNotice: String?,
+    isTestingConnection: Boolean,
+    testStatusMessage: String?,
+    viewModel: CumtAiCourseImportViewModel,
+    onJumpToChat: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var draftProviderId by remember { mutableStateOf(aiConfig.providerId) }
+    var draftBaseUrl by remember { mutableStateOf(aiConfig.baseUrl) }
+    var draftModel by remember { mutableStateOf(aiConfig.model) }
+    var draftProtocol by remember { mutableStateOf(aiConfig.protocolEnum) }
+    var draftApiKey by remember { mutableStateOf(savedApiKey) }
+    var showApiKeyPlain by remember { mutableStateOf(false) }
+
+    var modelQuery by remember { mutableStateOf("") }
+    var visionOnlyFilter by remember { mutableStateOf(false) }
+
+    LaunchedEffect(aiConfig.providerId, aiConfig.baseUrl, aiConfig.model, aiConfig.protocol, savedApiKey) {
+        draftProviderId = aiConfig.providerId
+        draftBaseUrl = aiConfig.baseUrl
+        draftModel = aiConfig.model
+        draftProtocol = aiConfig.protocolEnum
+        draftApiKey = savedApiKey
+    }
+
+    val filteredModels = remember(cachedModels, modelQuery, visionOnlyFilter) {
+        val kw = modelQuery.trim().lowercase()
+        cachedModels.filter { m ->
+            val matchVision = !visionOnlyFilter || m.supportsVision
+            val matchKw = kw.isEmpty() || m.id.lowercase().contains(kw) || m.displayName.lowercase().contains(kw)
+            matchVision && matchKw
+        }
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 1. 服务商与 API Key 卡
+        item {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CumtSectionHeader(
+                        title = "服务商与 API Key",
+                        subtitle = "填入 Key 后点击「自动识别模型」或保存即可拉取可用模型"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CumtSectionHeader(
-                            title = "上传实验安排 / 课表截图",
-                            subtitle = "支持红框标注筛选，自动跳过未排时间的空行"
-                        )
-
-                        if (selectedImage != null) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 140.dp, max = 260.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                    .clickable { fileManager.pickImage() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    bitmap = selectedImage!!,
-                                    contentDescription = "已选实验安排图片",
-                                    contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = { fileManager.pickImage() },
-                                    enabled = !isRecognizing,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        vectorResource(Res.drawable.image_24px),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("更换图片")
-                                }
-                            }
-                        } else {
-                            Surface(
-                                onClick = { fileManager.pickImage() },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(vertical = 26.dp, horizontal = 16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    CumtIconBadge(
-                                        icon = Res.drawable.upload_24px,
-                                        accent = CumtAccent.VIOLET,
-                                        size = 48.dp,
-                                        iconSize = 24.dp
-                                    )
-                                    Text(
-                                        text = "点击从相册选择实验安排图片",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "支持矿大实验系统排课截图、微信群通知表格截图等",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                        CumtAiProviderPreset.entries.forEach { preset ->
+                            FilterChip(
+                                selected = draftProviderId == preset.id,
+                                onClick = {
+                                    draftProviderId = preset.id
+                                    draftProtocol = preset.protocol
+                                    if (preset != CumtAiProviderPreset.CUSTOM) {
+                                        draftBaseUrl = preset.defaultBaseUrl
+                                        draftModel = preset.defaultModel
+                                    }
+                                },
+                                label = { Text(preset.displayName) }
+                            )
                         }
+                    }
 
-                        OutlinedTextField(
-                            value = userHint,
-                            onValueChange = { userHint = it },
-                            label = { Text("补充识别说明（可选）") },
-                            placeholder = { Text("例如：只识别红框里的 / 只要第1批 / 课程名前加自动控制原理") },
-                            maxLines = 2,
+                    Text(
+                        text = CumtAiProviderPreset.fromId(draftProviderId).hint,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    CumtSegmentedBar(
+                        options = CumtAiProtocol.entries.map { it.displayName },
+                        selectedIndex = CumtAiProtocol.entries.indexOf(draftProtocol).coerceAtLeast(0),
+                        onSelect = { idx -> draftProtocol = CumtAiProtocol.entries[idx] }
+                    )
+
+                    OutlinedTextField(
+                        value = draftApiKey,
+                        onValueChange = { draftApiKey = it },
+                        label = { Text("API Key（本地加密存储）") },
+                        placeholder = { Text("sk-xxxx / AIzaSy...") },
+                        singleLine = true,
+                        visualTransformation = if (showApiKeyPlain) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { showApiKeyPlain = !showApiKeyPlain }) {
+                                Text(if (showApiKeyPlain) "隐藏" else "显示")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = draftBaseUrl,
+                        onValueChange = { draftBaseUrl = it },
+                        label = { Text("API Base URL") },
+                        placeholder = { Text("https://api.siliconflow.cn/v1") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = draftModel,
+                        onValueChange = { draftModel = it },
+                        label = { Text("当前使用模型（可从下方自动识别列表点选）") },
+                        placeholder = { Text("Qwen/Qwen2.5-VL-72B-Instruct") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (!testStatusMessage.isNullOrBlank()) {
+                        val isFail = testStatusMessage.startsWith("失败")
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isFail) CumtAccent.CORAL.containerColor() else CumtAccent.EMERALD.containerColor(),
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                            Text(
+                                text = testStatusMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isFail) CumtAccent.CORAL.contentColor() else CumtAccent.EMERALD.contentColor(),
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.testConnection(
+                                    providerId = draftProviderId,
+                                    baseUrl = draftBaseUrl,
+                                    model = draftModel,
+                                    protocol = draftProtocol,
+                                    apiKey = draftApiKey
+                                )
+                            },
+                            enabled = !isTestingConnection && draftApiKey.isNotBlank() && draftModel.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (isTestingConnection) {
+                                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text("测试连通")
+                        }
 
                         Button(
                             onClick = {
-                                val bmp = selectedImage
-                                if (bmp == null) {
-                                    ToastManager.show("请先选择一张图片")
-                                } else if (!aiConfig.hasApiKey) {
-                                    configExpanded = true
-                                    ToastManager.show("请先填写并保存 API Key")
-                                } else {
-                                    viewModel.recognizeImage(bmp, userHint)
-                                }
+                                viewModel.saveApiConfig(
+                                    providerId = draftProviderId,
+                                    baseUrl = draftBaseUrl,
+                                    model = draftModel,
+                                    protocol = draftProtocol,
+                                    apiKey = draftApiKey,
+                                    autoDiscoverModels = true
+                                )
                             },
-                            enabled = selectedImage != null && !isRecognizing,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(14.dp)
+                            modifier = Modifier.weight(1f)
                         ) {
-                            if (isRecognizing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("AI 正在识别表格，请稍候...")
-                            } else {
-                                Icon(
-                                    vectorResource(Res.drawable.bolt_24px),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = if (recognizedCourses.isEmpty()) "开始 AI 识别" else "重新识别当前图片",
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Icon(vectorResource(Res.drawable.save_24px), contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("保存并识模型")
                         }
+                    }
 
-                        if (!errorMessage.isNullOrBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = CumtAccent.CORAL.containerColor(),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = "识别未成功",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = CumtAccent.CORAL.contentColor()
-                                    )
-                                    Text(
-                                        text = errorMessage!!,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = CumtAccent.CORAL.contentColor()
-                                    )
-                                }
+                    if (aiConfig.hasApiKey) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = onJumpToChat) {
+                                Text("返回对话 ›")
+                            }
+                            TextButton(onClick = {
+                                viewModel.clearApiKey()
+                                draftApiKey = ""
+                            }) {
+                                Text("清除 API Key", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
             }
+        }
 
-            // 3. 识别结果预览、编辑与追加导入
-            if (recognizedCourses.isNotEmpty()) {
-                item {
-                    CumtSectionHeader(
-                        title = "识别结果（已选 $selectedCount / ${recognizedCourses.size}）",
-                        subtitle = "点条目右侧铅笔可微调，导入将追加到课表不会覆盖原有课程",
-                        trailing = {
-                            TextButton(onClick = viewModel::toggleSelectAll) {
-                                Icon(
-                                    vectorResource(Res.drawable.done_all_24px),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+        // 2. 自动识别可用模型列表
+        item {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "自动识别可用模型（${cachedModels.size}）",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = modelFetchNotice ?: "支持从 OpenAI 兼容 /models 与 Gemini /models 自动发现",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.sessionRepo.refreshAvailableModels(
+                                    protocol = draftProtocol,
+                                    baseUrl = draftBaseUrl,
+                                    apiKey = draftApiKey
                                 )
+                            },
+                            enabled = !isFetchingModels && draftApiKey.isNotBlank() && draftBaseUrl.isNotBlank()
+                        ) {
+                            if (isFetchingModels) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                            } else {
+                                Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(if (selectedCount == recognizedCourses.size) "全不选" else "全选")
+                            }
+                            Text("自动拉取")
+                        }
+                    }
+
+                    if (cachedModels.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = modelQuery,
+                                onValueChange = { modelQuery = it },
+                                placeholder = { Text("搜索模型名...") },
+                                leadingIcon = {
+                                    Icon(vectorResource(Res.drawable.search_24px), contentDescription = null, modifier = Modifier.size(18.dp))
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = visionOnlyFilter,
+                                onClick = { visionOnlyFilter = !visionOnlyFilter },
+                                label = { Text("仅视觉") }
+                            )
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            filteredModels.take(40).forEach { modelInfo ->
+                                val isSelected = draftModel.equals(modelInfo.id, ignoreCase = true)
+                                Surface(
+                                    onClick = {
+                                        draftModel = modelInfo.id
+                                        viewModel.saveApiConfig(
+                                            providerId = draftProviderId,
+                                            baseUrl = draftBaseUrl,
+                                            model = modelInfo.id,
+                                            protocol = draftProtocol,
+                                            apiKey = draftApiKey,
+                                            autoDiscoverModels = false
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f)
+                                    },
+                                    border = if (isSelected) {
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                    } else null,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = modelInfo.id,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(Modifier.height(3.dp))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                                if (modelInfo.supportsVision) {
+                                                    CumtStatusPill(
+                                                        text = "视觉识图",
+                                                        containerColor = CumtAccent.VIOLET.containerColor(),
+                                                        contentColor = CumtAccent.VIOLET.contentColor()
+                                                    )
+                                                }
+                                                if (modelInfo.supportsTools) {
+                                                    CumtStatusPill(
+                                                        text = "工具调用",
+                                                        containerColor = CumtAccent.TEAL.containerColor(),
+                                                        contentColor = CumtAccent.TEAL.contentColor()
+                                                    )
+                                                }
+                                                if (modelInfo.isReasoning) {
+                                                    CumtStatusPill(
+                                                        text = "深度思考",
+                                                        containerColor = CumtAccent.AMBER.containerColor(),
+                                                        contentColor = CumtAccent.AMBER.contentColor()
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (isSelected) {
+                                            Icon(
+                                                vectorResource(Res.drawable.check_24px),
+                                                contentDescription = "已选中",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (filteredModels.size > 40) {
+                                Text(
+                                    text = "已展示前 40 个匹配模型，可输入关键词精准筛选",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // 3. 悬浮球与交互偏好
+        item {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CumtSectionHeader(
+                        title = "AI 助手交互偏好",
+                        subtitle = "类似 Notion AI 的全局悬浮球与安全确认策略"
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("全局 AI 悬浮小球", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "在课表、成绩、考试等页面边缘常驻悬浮球，拖拽贴边、单击秒开半屏助手",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = aiConfig.floatingOrbEnabled,
+                            onCheckedChange = viewModel::setFloatingOrbEnabled
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("自动执行课表修改（信任模式）", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "关闭时：所有新增/调课/删除均先弹出预览卡片确认后再写入（推荐）",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = aiConfig.autoExecuteWrites,
+                            onCheckedChange = viewModel::setAutoExecuteWrites
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Suppress("DEPRECATION")
+@Composable
+private fun AiMcpServerTabContent(
+    mcpConfig: CumtMcpConfig,
+    isSupported: Boolean,
+    isRunning: Boolean,
+    activeEndpoint: String,
+    lastError: String?,
+    lanAddresses: List<String>,
+    auditLogs: List<CumtMcpAuditEntry>,
+    mcpManager: ShiguangMcpServerManager,
+    modifier: Modifier = Modifier
+) {
+    val clipboardManager = LocalClipboardManager.current
+    var portText by remember(mcpConfig.port) { mutableStateOf(mcpConfig.port.toString()) }
+    var bindAll by remember(mcpConfig.bindAllInterfaces) { mutableStateOf(mcpConfig.bindAllInterfaces) }
+    var allowWrite by remember(mcpConfig.allowWrite) { mutableStateOf(mcpConfig.allowWrite) }
+
+    val primaryHost = remember(lanAddresses, bindAll) {
+        if (bindAll) lanAddresses.firstOrNull() ?: "127.0.0.1" else "127.0.0.1"
+    }
+    val effectivePort = portText.toIntOrNull()?.coerceIn(1024, 65535) ?: mcpConfig.port
+    val configSnippet = remember(primaryHost, effectivePort, mcpConfig.token) {
+        ShiguangMcpDispatcher.buildClientConfigSnippet(
+            host = primaryHost,
+            port = effectivePort,
+            token = mcpConfig.token
+        )
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 1. 状态 Hero 卡片
+        item {
+            CumtHeroGradientCard(
+                gradientColors = if (isRunning) {
+                    listOf(Color(0xFF0E7C86), Color(0xFF137E52))
+                } else {
+                    listOf(Color(0xFF334155), Color(0xFF475569))
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CumtStatusPill(
+                            text = if (isRunning) "MCP 运行中" else "MCP 未启动",
+                            containerColor = Color.White.copy(alpha = 0.2f),
+                            contentColor = Color.White,
+                            dotColor = if (isRunning) Color(0xFF7BE0B2) else Color(0xFFFFCA73)
+                        )
+                        CumtStatusPill(
+                            text = if (allowWrite) "读写权限" else "仅只读",
+                            containerColor = Color.White.copy(alpha = 0.18f),
+                            contentColor = Color.White
+                        )
+                    }
+                    Text(
+                        text = if (isRunning) activeEndpoint else "对外暴露标准 MCP 课表接口",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "支持 Streamable HTTP (/mcp) 与 SSE (/sse)，让 Cursor、Claude、Antigravity、Cherry Studio 等外部 Agent 读取或修改本机课表。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.88f)
                     )
                 }
+            }
+        }
 
-                item {
-                    CumtSurfaceCard(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+        // 2. 控制面板
+        item {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (!isSupported) {
+                        Text(
+                            text = "当前平台暂不支持本地监听 MCP 端口，请在 Android 或桌面端开启。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = portText,
+                                onValueChange = { portText = it.filter(Char::isDigit).take(5) },
+                                label = { Text("监听端口") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    if (isRunning) {
+                                        mcpManager.stopServer()
+                                        ToastManager.show("已停止 MCP 服务")
+                                    } else {
+                                        mcpManager.startOrRestart(
+                                            port = effectivePort,
+                                            allowWrite = allowWrite,
+                                            bindAllInterfaces = bindAll
+                                        )
+                                        ToastManager.show("正在启动 MCP 服务...")
+                                    }
+                                },
+                                modifier = Modifier.height(52.dp),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Icon(vectorResource(Res.drawable.bolt_24px), contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (isRunning) "停止服务" else "启动 MCP", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (!lastError.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = CumtAccent.CORAL.containerColor(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "错误：$lastError",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CumtAccent.CORAL.contentColor(),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
+                                Text("允许外部 Agent 修改课表", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    text = "课名前自动添加 [实验] 标记",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "开启后更容易在周课表中与普通理论课区分",
+                                    "关闭时仅开放查询工具；开启后允许新增、调课、修改和删除课程",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = addLabPrefix,
-                                onCheckedChange = viewModel::setAddLabPrefix
+                                checked = allowWrite,
+                                onCheckedChange = { checked ->
+                                    allowWrite = checked
+                                    mcpManager.updateAllowWrite(checked)
+                                }
                             )
                         }
-                    }
-                }
 
-                items(recognizedCourses, key = { it.id }) { item ->
-                    AiRecognizedCourseCard(
-                        item = item,
-                        showLabPrefix = addLabPrefix,
-                        onToggleSelect = { viewModel.toggleSelection(item.id) },
-                        onEdit = { editingCourse = item },
-                        onDelete = { viewModel.removeCourse(item.id) }
-                    )
-                }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                item {
-                    Button(
-                        onClick = { showTablePicker = true },
-                        enabled = selectedCount > 0 && !isImporting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        if (isImporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("允许同局域网 / Wi-Fi 设备接入", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "监听 0.0.0.0（需重启生效），关闭则仅限本机 127.0.0.1 或 adb forward 访问",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = bindAll,
+                                onCheckedChange = { checked ->
+                                    bindAll = checked
+                                    if (isRunning) {
+                                        mcpManager.startOrRestart(effectivePort, allowWrite, checked)
+                                    }
+                                }
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text("正在追加写入课表...")
-                        } else {
-                            Icon(
-                                vectorResource(Res.drawable.check_circle_24px),
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = "追加导入已选 $selectedCount 条到课表",
-                                fontWeight = FontWeight.Bold
-                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                        // Bearer Token 区域
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("鉴权令牌 (Bearer Token)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = mcpConfig.token.ifBlank { "启动 MCP 服务后自动生成" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Row {
+                                if (mcpConfig.token.isNotBlank()) {
+                                    IconButton(onClick = {
+                                        clipboardManager.setText(AnnotatedString(mcpConfig.token))
+                                        ToastManager.show("已复制 Bearer Token")
+                                    }) {
+                                        Icon(vectorResource(Res.drawable.content_copy_24px), contentDescription = "复制 Token", modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                                TextButton(onClick = {
+                                    mcpManager.regenerateToken()
+                                    ToastManager.show("已重置鉴权 Token")
+                                }) {
+                                    Text("重置")
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
 
-            // 4. 隐私与使用提示
-            item {
-                CumtSurfaceCard(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
+        // 3. 一键复制标准 mcpServers 配置 JSON
+        item {
+            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.Top
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        CumtIconBadge(
-                            icon = Res.drawable.info_24px,
-                            accent = CumtAccent.SLATE,
-                            size = 36.dp,
-                            iconSize = 18.dp
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Agent 接入配置（JSON）", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "可选地址：${lanAddresses.joinToString(" / ")}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { mcpManager.refreshLanAddresses() }) {
+                            Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = "刷新 IP", modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = configSnippet,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(configSnippet))
+                            ToastManager.show("已复制 mcpServers JSON 配置")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(vectorResource(Res.drawable.content_copy_24px), contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("一键复制配置到剪贴板", fontWeight = FontWeight.Bold)
+                    }
+
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            vectorResource(Res.drawable.info_24px),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "说明：本功能为「追加导入」，不会清空当前课表中的常规课程；若包含周六/周日实验课，导入时会自动为您开启课表周末显示。您的 API Key 仅加密保存在本地设备，识别请求直连您配置的模型接口。",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "提示：手机与电脑在同一 Wi-Fi 下直接用局域网 IP 接入；若校园网禁止设备互通，可用数据线运行 adb forward tcp:$effectivePort tcp:$effectivePort 后改用 127.0.0.1 接入。桌面版还支持命令行参数 --mcp-stdio 直接挂载。",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                Spacer(Modifier.height(16.dp))
             }
         }
-    }
 
-    if (editingCourse != null) {
-        EditRecognizedCourseDialog(
-            course = editingCourse!!,
-            onDismiss = { editingCourse = null },
-            onSave = { updated ->
-                viewModel.updateCourse(updated)
-                editingCourse = null
-            }
-        )
-    }
-
-    if (showTablePicker) {
-        CourseTablePickerDialog(
-            title = "选择要追加导入的目标课表",
-            onDismissRequest = { showTablePicker = false },
-            onTableSelected = { table ->
-                showTablePicker = false
-                viewModel.appendImportToTable(table) {
-                    onNavigate(Destination.CourseSchedule)
+        // 4. 实时调用审计日志
+        item {
+            CumtSectionHeader(
+                title = "外部 Agent 调用记录（${auditLogs.size}）",
+                subtitle = "实时查看外部 MCP 客户端的读写调用与权限拦截状态",
+                trailing = {
+                    if (auditLogs.isNotEmpty()) {
+                        TextButton(onClick = { mcpManager.dispatcher.clearAuditLogs() }) {
+                            Text("清空")
+                        }
+                    }
                 }
-            }
-        )
-    }
-}
-
-@Composable
-private fun AiRecognizedCourseCard(
-    item: CumtAiRecognizedCourse,
-    showLabPrefix: Boolean,
-    onToggleSelect: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val displayName = if (showLabPrefix && !item.name.startsWith("[实验]")) {
-        "[实验] ${item.name}"
-    } else {
-        item.name
-    }
-    val weeksText = "第${CumtParsers.formatWeeksCompact(item.weeks)}周"
-    val dayText = CumtParsers.formatDayOfWeekLabel(item.day)
-    val sectionText = if (item.startSection == item.endSection) {
-        "第${item.startSection}节"
-    } else {
-        "第${item.startSection}-${item.endSection}节"
-    }
-
-    CumtSurfaceCard(
-        onClick = onToggleSelect,
-        borderColor = if (item.selected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-        } else {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-        },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Checkbox(
-                checked = item.selected,
-                onCheckedChange = { onToggleSelect() }
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        }
+
+        if (auditLogs.isEmpty()) {
+            item {
+                CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "暂无外部 Agent 调用记录。启动服务并从其他 Agent 发起请求后将在此显示。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        } else {
+            items(auditLogs, key = { it.id }) { entry ->
+                CumtSurfaceCard(
+                    cornerRadius = 14.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    CumtStatusPill(
-                        text = weeksText,
-                        containerColor = CumtAccent.INDIGO.containerColor(),
-                        contentColor = CumtAccent.INDIGO.contentColor()
-                    )
-                    CumtStatusPill(
-                        text = "$dayText · $sectionText",
-                        containerColor = CumtAccent.TEAL.containerColor(),
-                        contentColor = CumtAccent.TEAL.contentColor(),
-                        icon = Res.drawable.schedule_24px
-                    )
-                }
-                val metaParts = buildList {
-                    if (item.position.isNotBlank()) add(item.position)
-                    if (item.teacher.isNotBlank()) add(item.teacher)
-                }
-                if (metaParts.isNotEmpty()) {
                     Row(
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (item.position.isNotBlank()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    vectorResource(Res.drawable.location_on_24px),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.width(3.dp))
-                                Text(
-                                    text = item.position,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        if (item.teacher.isNotBlank()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    vectorResource(Res.drawable.person_24px),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.width(3.dp))
-                                Text(
-                                    text = item.teacher,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                        CumtStatusPill(
+                            text = if (entry.allowed) "允许" else "拦截",
+                            containerColor = if (entry.allowed) CumtAccent.EMERALD.containerColor() else CumtAccent.CORAL.containerColor(),
+                            contentColor = if (entry.allowed) CumtAccent.EMERALD.contentColor() else CumtAccent.CORAL.contentColor()
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = listOfNotNull(entry.method, entry.toolName).joinToString(" · "),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = entry.summary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
-                if (item.remark.isNotBlank()) {
-                    Text(
-                        text = item.remark,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onEdit, modifier = Modifier.size(34.dp)) {
-                    Icon(
-                        vectorResource(Res.drawable.edit_24px),
-                        contentDescription = "编辑",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
-                    Icon(
-                        vectorResource(Res.drawable.delete_24px),
-                        contentDescription = "移除",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            item { Spacer(Modifier.height(16.dp)) }
         }
     }
-}
-
-@Composable
-private fun EditRecognizedCourseDialog(
-    course: CumtAiRecognizedCourse,
-    onDismiss: () -> Unit,
-    onSave: (CumtAiRecognizedCourse) -> Unit
-) {
-    var name by remember { mutableStateOf(course.name) }
-    var teacher by remember { mutableStateOf(course.teacher) }
-    var position by remember { mutableStateOf(course.position) }
-    var day by remember { mutableIntStateOf(course.day.coerceIn(1, 7)) }
-    var startSecText by remember { mutableStateOf(course.startSection.toString()) }
-    var endSecText by remember { mutableStateOf(course.endSection.toString()) }
-    var weeksText by remember { mutableStateOf(CumtParsers.formatWeeksCompact(course.weeks)) }
-    var remark by remember { mutableStateOf(course.remark) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("编辑识别条目", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("课程 / 实验名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = teacher,
-                        onValueChange = { teacher = it },
-                        label = { Text("教师") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = position,
-                        onValueChange = { position = it },
-                        label = { Text("地点/实验室") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Text(
-                    text = "星期",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    (1..7).forEach { d ->
-                        FilterChip(
-                            selected = day == d,
-                            onClick = { day = d },
-                            label = { Text(CumtParsers.formatDayOfWeekLabel(d)) }
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = startSecText,
-                        onValueChange = { startSecText = it.filter(Char::isDigit) },
-                        label = { Text("起始节次") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = endSecText,
-                        onValueChange = { endSecText = it.filter(Char::isDigit) },
-                        label = { Text("结束节次") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                OutlinedTextField(
-                    value = weeksText,
-                    onValueChange = { weeksText = it },
-                    label = { Text("周次（如 11 或 11-12 或 11,13）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = remark,
-                    onValueChange = { remark = it },
-                    label = { Text("备注（批次/学时等）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val trimmedName = name.trim()
-                    val parsedWeeks = CumtParsers.parseManualWeeksInput(weeksText)
-                    val s = startSecText.toIntOrNull()?.coerceIn(1, 20)
-                    val e = endSecText.toIntOrNull()?.coerceIn(1, 20)
-                    if (trimmedName.isBlank()) {
-                        ToastManager.show("名称不能为空")
-                        return@Button
-                    }
-                    if (s == null || e == null || e < s) {
-                        ToastManager.show("请输入有效的起止节次（如 1 到 2）")
-                        return@Button
-                    }
-                    if (parsedWeeks.isEmpty()) {
-                        ToastManager.show("请输入有效周次（1~30）")
-                        return@Button
-                    }
-                    onSave(
-                        course.copy(
-                            name = trimmedName,
-                            teacher = teacher.trim(),
-                            position = position.trim(),
-                            day = day,
-                            startSection = s,
-                            endSection = e,
-                            weeks = parsedWeeks,
-                            remark = remark.trim()
-                        )
-                    )
-                }
-            ) {
-                Text("保存修改")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }

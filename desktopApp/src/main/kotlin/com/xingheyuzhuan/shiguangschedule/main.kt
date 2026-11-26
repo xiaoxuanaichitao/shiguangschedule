@@ -13,13 +13,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import com.xingheyuzhuan.shiguangschedule.cumt.ShiguangMcpDispatcher
 import com.xingheyuzhuan.shiguangschedule.data.di.SharedModule
+import kotlinx.coroutines.runBlocking
 import org.koin.core.annotation.ComponentScan
 import org.koin.core.annotation.KoinApplication
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Named
 import org.koin.core.annotation.Single
+import org.koin.mp.KoinPlatform
 import org.koin.plugin.module.dsl.startKoin
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -39,7 +44,28 @@ class DesktopAppModule {
 @KoinApplication(modules = [DesktopAppModule::class])
 class DesktopAppConfig
 
-fun main() {
+fun main(args: Array<String>) {
+    if ("--mcp-stdio" in args) {
+        val allowWrite = "--read-only" !in args
+        startKoin<DesktopAppConfig>()
+        val dispatcher = KoinPlatform.getKoin().get<ShiguangMcpDispatcher>()
+        val reader = BufferedReader(InputStreamReader(System.`in`, Charsets.UTF_8))
+        val out = System.out
+        runBlocking {
+            while (true) {
+                val line = reader.readLine() ?: break
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+                val resp = dispatcher.handleJsonRpc(trimmed, allowWrite = allowWrite)
+                if (resp != null) {
+                    out.println(resp)
+                    out.flush()
+                }
+            }
+        }
+        return
+    }
+
     var fatalError by mutableStateOf<String?>(null)
 
     Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

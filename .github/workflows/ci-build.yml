@@ -119,15 +119,15 @@ jobs:
         run: |
           chmod +x ./gradlew
           if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "检测到私有 Release 签名 Secret，使用正式签名构建 Release APK"
             echo "$KEYSTORE_BASE64" | base64 --decode > androidApp/release.jks
-            ./gradlew assembleRelease \
-              -Pandroid.injected.signing.store.file="${{ github.workspace }}/androidApp/release.jks" \
-              -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-              -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-              -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
-              --stacktrace
+            SIGNING_STORE_FILE="${{ github.workspace }}/androidApp/release.jks" \
+            SIGNING_STORE_PASSWORD="$KEYSTORE_PASSWORD" \
+            SIGNING_KEY_ALIAS="$KEY_ALIAS" \
+            SIGNING_KEY_PASSWORD="$KEY_PASSWORD" \
+            ./gradlew assembleRelease --stacktrace
           else
-            echo "未配置自定义签名密钥，使用默认签名构建 Debug 与 Release APK"
+            echo "使用仓库固定签名 androidApp/ci-debug.keystore 构建 APK（支持后续覆盖升级）"
             ./gradlew assembleDebug assembleRelease --stacktrace
           fi
 

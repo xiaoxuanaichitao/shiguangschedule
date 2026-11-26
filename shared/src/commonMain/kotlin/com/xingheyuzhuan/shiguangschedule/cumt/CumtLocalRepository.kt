@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.xingheyuzhuan.shiguangschedule.tool.SecureCrypto
 import kotlinx.coroutines.flow.Flow
@@ -53,6 +55,17 @@ class CumtLocalRepository(
         val KEY_AI_ENC_API_KEY = stringPreferencesKey("cumt_ai_enc_api_key")
         val KEY_AI_API_KEY_IV = stringPreferencesKey("cumt_ai_api_key_iv")
         val KEY_AI_PLAIN_FALLBACK = stringPreferencesKey("cumt_ai_plain_fallback")
+        val KEY_AI_CACHED_MODELS_JSON = stringPreferencesKey("cumt_ai_cached_models_json")
+        val KEY_AI_ORB_ENABLED = booleanPreferencesKey("cumt_ai_orb_enabled")
+        val KEY_AI_ORB_Y_FRACTION = floatPreferencesKey("cumt_ai_orb_y_fraction")
+        val KEY_AI_ORB_ON_RIGHT = booleanPreferencesKey("cumt_ai_orb_on_right")
+        val KEY_AI_AUTO_EXEC_WRITES = booleanPreferencesKey("cumt_ai_auto_exec_writes")
+
+        val KEY_MCP_ENABLED = booleanPreferencesKey("cumt_mcp_enabled")
+        val KEY_MCP_PORT = intPreferencesKey("cumt_mcp_port")
+        val KEY_MCP_TOKEN = stringPreferencesKey("cumt_mcp_token")
+        val KEY_MCP_ALLOW_WRITE = booleanPreferencesKey("cumt_mcp_allow_write")
+        val KEY_MCP_BIND_ALL = booleanPreferencesKey("cumt_mcp_bind_all")
     }
 
     // ==================== 统一身份认证凭据 ====================
@@ -337,8 +350,64 @@ class CumtLocalRepository(
             baseUrl = prefs[KEY_AI_BASE_URL] ?: preset.defaultBaseUrl,
             model = prefs[KEY_AI_MODEL] ?: preset.defaultModel,
             protocol = prefs[KEY_AI_PROTOCOL] ?: preset.protocol.name,
-            hasApiKey = hasKey
+            hasApiKey = hasKey,
+            floatingOrbEnabled = prefs[KEY_AI_ORB_ENABLED] ?: true,
+            floatingOrbYFraction = (prefs[KEY_AI_ORB_Y_FRACTION] ?: 0.72f).coerceIn(0.12f, 0.85f),
+            floatingOrbOnRight = prefs[KEY_AI_ORB_ON_RIGHT] ?: true,
+            autoExecuteWrites = prefs[KEY_AI_AUTO_EXEC_WRITES] ?: false
         )
+    }
+
+    val cachedAiModelsFlow: Flow<List<CumtAiModelInfo>> = dataStore.data.map { prefs ->
+        val raw = prefs[KEY_AI_CACHED_MODELS_JSON].orEmpty()
+        if (raw.isBlank()) emptyList()
+        else runCatching {
+            json.decodeFromString(ListSerializer(CumtAiModelInfo.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveCachedAiModels(models: List<CumtAiModelInfo>) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AI_CACHED_MODELS_JSON] =
+                json.encodeToString(ListSerializer(CumtAiModelInfo.serializer()), models)
+        }
+    }
+
+    suspend fun setFloatingOrbEnabled(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[KEY_AI_ORB_ENABLED] = enabled }
+    }
+
+    suspend fun saveFloatingOrbPosition(yFraction: Float, onRight: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AI_ORB_Y_FRACTION] = yFraction.coerceIn(0.12f, 0.85f)
+            prefs[KEY_AI_ORB_ON_RIGHT] = onRight
+        }
+    }
+
+    suspend fun setAiAutoExecuteWrites(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[KEY_AI_AUTO_EXEC_WRITES] = enabled }
+    }
+
+    // ==================== MCP Server 配置 ====================
+
+    val mcpConfigFlow: Flow<CumtMcpConfig> = dataStore.data.map { prefs ->
+        CumtMcpConfig(
+            enabled = prefs[KEY_MCP_ENABLED] ?: false,
+            port = (prefs[KEY_MCP_PORT] ?: 8765).coerceIn(1024, 65535),
+            token = prefs[KEY_MCP_TOKEN].orEmpty(),
+            allowWrite = prefs[KEY_MCP_ALLOW_WRITE] ?: false,
+            bindAllInterfaces = prefs[KEY_MCP_BIND_ALL] ?: true
+        )
+    }
+
+    suspend fun saveMcpConfig(config: CumtMcpConfig) {
+        dataStore.edit { prefs ->
+            prefs[KEY_MCP_ENABLED] = config.enabled
+            prefs[KEY_MCP_PORT] = config.port.coerceIn(1024, 65535)
+            prefs[KEY_MCP_TOKEN] = config.token.trim()
+            prefs[KEY_MCP_ALLOW_WRITE] = config.allowWrite
+            prefs[KEY_MCP_BIND_ALL] = config.bindAllInterfaces
+        }
     }
 
     suspend fun getSavedAiApiKey(): String {

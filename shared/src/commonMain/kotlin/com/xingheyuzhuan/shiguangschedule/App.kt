@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdaptiveNavigationScaffold
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CampusDiscoverScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAiCourseImportScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAiFloatingOverlay
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAuthScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusCardScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusNetScreen
@@ -140,51 +142,59 @@ fun AppNavigation(startDestination: Destination) {
 
     val animSpec = tween<IntOffset>(300)
 
-    AdaptiveNavigationScaffold(
-        currentDestination = currentDestination,
-        onTabSelected = onNavigate,
-        showNavigation = currentDestination.isMainScreen,
-        navHideFractionProvider = { navHideFraction }
-    ) { _ ->
-        NavDisplay(
-            backStack = backStack,
-            onBack = onBack,
-            modifier = Modifier.fillMaxSize(),
-            transitionSpec = {
-                slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
-                        slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
-            },
-            popTransitionSpec = {
-                slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
-            },
-            predictivePopTransitionSpec = {
-                slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
-                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
-            },
-            entryDecorators = listOf(
-                rememberSaveableStateHolderNavEntryDecorator(),
-                rememberViewModelStoreNavEntryDecorator()
-            )
-        ) { key ->
-            val destination = key as Destination
+    Box(modifier = Modifier.fillMaxSize()) {
+        AdaptiveNavigationScaffold(
+            currentDestination = currentDestination,
+            onTabSelected = onNavigate,
+            showNavigation = currentDestination.isMainScreen,
+            navHideFractionProvider = { navHideFraction }
+        ) { _ ->
+            NavDisplay(
+                backStack = backStack,
+                onBack = onBack,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
+                },
+                popTransitionSpec = {
+                    slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
+                },
+                predictivePopTransitionSpec = {
+                    slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
+                },
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator()
+                )
+            ) { key ->
+                val destination = key as Destination
 
-            NavEntry(
-                key = key,
-                metadata = metadata {
-                    put(ShiguangNavMetadata.IsMainScreenKey, destination.isMainScreen)
-                }
-            ) {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    ScreenContent(
-                        targetDest = destination,
-                        onNavigate = onNavigate,
-                        onBack = onBack,
-                        onNavHideFractionChanged = { navHideFraction = it }
-                    )
+                NavEntry(
+                    key = key,
+                    metadata = metadata {
+                        put(ShiguangNavMetadata.IsMainScreenKey, destination.isMainScreen)
+                    }
+                ) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        ScreenContent(
+                            targetDest = destination,
+                            onNavigate = onNavigate,
+                            onBack = onBack,
+                            onNavHideFractionChanged = { navHideFraction = it }
+                        )
+                    }
                 }
             }
         }
+
+        // Notion 风格全局可拖拽 AI 悬浮小球与半屏灵动对话抽屉
+        CumtAiFloatingOverlay(
+            currentDestination = currentDestination,
+            onNavigate = onNavigate
+        )
     }
 }
 

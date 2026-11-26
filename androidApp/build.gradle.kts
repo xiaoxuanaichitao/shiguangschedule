@@ -15,17 +15,61 @@ android {
     namespace = "com.xingheyuzhuan.shiguangschedule"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
+    val ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+
     defaultConfig {
         applicationId = "com.cumt.shiguangschedule"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 36
+        versionCode = 37 + ciRunNumber
         versionName = "2.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val releaseStoreFile = providers.gradleProperty("SIGNING_STORE_FILE").orNull
+        ?: System.getenv("SIGNING_STORE_FILE")
+    val releaseStorePassword = providers.gradleProperty("SIGNING_STORE_PASSWORD").orNull
+        ?: System.getenv("SIGNING_STORE_PASSWORD")
+    val releaseKeyAlias = providers.gradleProperty("SIGNING_KEY_ALIAS").orNull
+        ?: System.getenv("SIGNING_KEY_ALIAS")
+    val releaseKeyPassword = providers.gradleProperty("SIGNING_KEY_PASSWORD").orNull
+        ?: System.getenv("SIGNING_KEY_PASSWORD")
+    val fixedCiKeystore = file("ci-debug.keystore")
+
+    signingConfigs {
+        if (fixedCiKeystore.exists()) {
+            create("fixedCi") {
+                storeFile = fixedCiKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+        if (
+            !releaseStoreFile.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank() &&
+            file(releaseStoreFile).exists()
+        ) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.findByName("fixedCi") ?: signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -33,7 +77,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.findByName("fixedCi")
+                ?: signingConfigs.getByName("debug")
         }
     }
 

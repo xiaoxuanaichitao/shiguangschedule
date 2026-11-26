@@ -209,9 +209,9 @@ fun CumtCourseImportScreen(
                 stepLabel = "03",
                 icon = Res.drawable.image_24px,
                 accent = CumtAccent.VIOLET,
-                title = "AI 识图导实验 / 课表",
-                subtitle = "自定义你的 AI API Key，上传实验安排表或课表截图即可自动识别周次、星期、节次与实验室，支持编辑后追加导入到现有课表。",
-                badge = "AI 识图 · 支持实验表",
+                title = "矿大 AI 助手（对话 / 识图 / MCP）",
+                subtitle = "接入自定义 API Key 并自动识别可用模型，支持自然语言文字加课/调课、上传实验安排图一键解析导入，以及开启 MCP 接口供外部 Agent 读写。",
+                badge = "AI 助手 · 悬浮球 · MCP",
                 onClick = { onNavigate(Destination.CumtAiCourseImport) }
             )
 

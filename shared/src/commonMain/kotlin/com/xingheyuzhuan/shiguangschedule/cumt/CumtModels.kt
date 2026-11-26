@@ -416,12 +416,25 @@ enum class CumtAiProviderPreset(
 }
 
 @Serializable
+data class CumtAiModelInfo(
+    val id: String,
+    val displayName: String = id,
+    val supportsVision: Boolean = false,
+    val supportsTools: Boolean = true,
+    val isReasoning: Boolean = false
+)
+
+@Serializable
 data class CumtAiConfig(
     val providerId: String = CumtAiProviderPreset.SILICONFLOW.id,
     val baseUrl: String = CumtAiProviderPreset.SILICONFLOW.defaultBaseUrl,
     val model: String = CumtAiProviderPreset.SILICONFLOW.defaultModel,
     val protocol: String = CumtAiProviderPreset.SILICONFLOW.protocol.name,
-    val hasApiKey: Boolean = false
+    val hasApiKey: Boolean = false,
+    val floatingOrbEnabled: Boolean = true,
+    val floatingOrbYFraction: Float = 0.72f,
+    val floatingOrbOnRight: Boolean = true,
+    val autoExecuteWrites: Boolean = false
 ) {
     val presetEnum: CumtAiProviderPreset
         get() = CumtAiProviderPreset.fromId(providerId)
@@ -442,4 +455,56 @@ data class CumtAiRecognizedCourse(
     val weeks: List<Int>,
     val remark: String = "",
     val selected: Boolean = true
+)
+
+@Serializable
+enum class CumtAiActionStatus {
+    PENDING,
+    APPLIED,
+    REJECTED,
+    FAILED
+}
+
+@Serializable
+data class CumtAiPendingAction(
+    val id: String,
+    val toolName: String,
+    val title: String,
+    val summary: String,
+    val detailLines: List<String> = emptyList(),
+    val argumentsJson: String,
+    val status: CumtAiActionStatus = CumtAiActionStatus.PENDING,
+    val resultMessage: String = ""
+)
+
+@Serializable
+data class CumtAiChatMessage(
+    val id: String,
+    val role: String, // "user" | "assistant"
+    val text: String,
+    val hasImage: Boolean = false,
+    val imageNote: String = "",
+    val toolTrace: List<String> = emptyList(),
+    val pendingActions: List<CumtAiPendingAction> = emptyList(),
+    val isError: Boolean = false,
+    val timestampMillis: Long = 0L
+)
+
+@Serializable
+data class CumtMcpConfig(
+    val enabled: Boolean = false,
+    val port: Int = 8765,
+    val token: String = "",
+    val allowWrite: Boolean = false,
+    val bindAllInterfaces: Boolean = true
+)
+
+@Serializable
+data class CumtMcpAuditEntry(
+    val id: String,
+    val timestampMillis: Long,
+    val method: String,
+    val toolName: String? = null,
+    val allowed: Boolean,
+    val summary: String
 )

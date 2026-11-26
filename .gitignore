@@ -16,6 +16,7 @@ output-metadata.json
 
 *.jks
 *.keystore
+!androidApp/ci-debug.keystore
 google-services.json
 
 *.iml

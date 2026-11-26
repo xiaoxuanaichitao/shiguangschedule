@@ -255,8 +255,8 @@ fun CampusDiscoverScreen(
             onClick = { onNavigate(Destination.CumtCourseImport) }
         ),
         DiscoverToolItem(
-            title = "AI 识图导课",
-            subtitle = "实验表截图与 API Key",
+            title = "矿大 AI 助手",
+            subtitle = "对话排课 / 识图 / MCP",
             icon = Res.drawable.image_24px,
             accent = CumtAccent.VIOLET,
             badge = if (aiConfig.hasApiKey) "已配置" else "配置 Key",

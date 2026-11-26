@@ -7,6 +7,8 @@ val JS_INTERCEPT_POST = """
 (function() {
     var bridge = window.WebPostService;
     if (!bridge || window._postInterceptInjected) return;
+    var host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    if (host === 'cumt.edu.cn' || host.slice(-12) === '.cumt.edu.cn') return;
     window._postInterceptInjected = true;
 
     var requestIdHeader = 'X-WebView-Post-Id';

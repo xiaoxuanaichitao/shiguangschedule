@@ -435,12 +435,13 @@ object CumtWebScripts {
                             'html, body { width: 100% !important; min-width: 0 !important; overflow-x: hidden !important; background: #f4f7fa !important; }',
                             '.logo_1, .sl_top, .col-sm-8, .sl_log_lf, .login_left, #login_left, .carousel, footer, .footer, .copyright, .login_bg_left { display: none !important; }',
                             '.container, .row { width: 100% !important; min-width: 0 !important; max-width: 100% !important; margin: 0 auto !important; padding: 0 12px !important; box-sizing: border-box !important; }',
-                            '.col-sm-4, .sl_log_rt, #login_right { width: 100% !important; max-width: 440px !important; float: none !important; margin: 18px auto !important; padding: 20px 18px !important; background: #ffffff !important; border-radius: 16px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important; box-sizing: border-box !important; }',
-                            '#yzmDiv, .yzm { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 10px !important; flex-wrap: nowrap !important; }',
-                            '#yzmDiv > *, .yzm > * { width: auto !important; float: none !important; margin: 0 !important; }',
-                            '#yzm, input[name="yzm"] { flex: 1 1 0% !important; min-width: 0 !important; }',
+                            '.col-sm-4, .sl_log_rt, #login_right { width: 100% !important; max-width: 440px !important; float: none !important; margin: 18px auto !important; padding: 20px 16px !important; background: #ffffff !important; border-radius: 16px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.06) !important; box-sizing: border-box !important; }',
+                            '.sl_log_rt form, #login_right form, .sl_log_rt .form-group, #login_right .form-group, .sl_log_rt [class*="col-"], #login_right [class*="col-"] { width: 100% !important; max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; padding-left: 0 !important; padding-right: 0 !important; float: none !important; box-sizing: border-box !important; }',
+                            '#yzmDiv, .yzm { display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important; gap: 10px !important; width: 100% !important; }',
+                            '#yzmDiv > *, .yzm > * { float: none !important; margin: 0 !important; box-sizing: border-box !important; }',
+                            '#yzmDiv > input, .yzm > input, #yzm, input[name="yzm"] { flex: 1 1 130px !important; min-width: 120px !important; width: 100% !important; max-width: 100% !important; padding: 6px 12px !important; }',
                             '#yhm, #mm, #yzm, input[name="yhm"], input[name="mm"], input[name="yzm"] { height: 46px !important; min-height: 46px !important; font-size: 16px !important; border-radius: 10px !important; box-sizing: border-box !important; }',
-                            '#yzmPic, img[src*="kaptcha"], img[src*="yzm"] { flex: 0 0 auto !important; height: 46px !important; min-width: 112px !important; width: auto !important; border-radius: 8px !important; object-fit: contain !important; cursor: pointer !important; }',
+                            '#yzmPic, img[src*="kaptcha"], img[src*="yzm"] { flex: 0 0 auto !important; height: 44px !important; width: auto !important; max-width: 140px !important; min-width: 0 !important; border-radius: 8px !important; object-fit: contain !important; cursor: pointer !important; display: block !important; }',
                             '#dl, .btn-primary { width: 100% !important; height: 46px !important; font-size: 16px !important; border-radius: 10px !important; }'
                         ].join('\n');
                     } else if (isJwxt) {
@@ -467,7 +468,50 @@ object CumtWebScripts {
                     }
                     styleEl.textContent = css;
 
-                    if (isJwxt && !isLoginPage) {
+                    if (isLoginPage) {
+                        function fixLoginCaptchaRow() {
+                            try {
+                                function findRowChild(el) {
+                                    var cur = el;
+                                    for (var d = 0; d < 4 && cur && cur.parentElement; d++) {
+                                        var p = cur.parentElement;
+                                        if (p.id === 'yzmDiv' || p.classList.contains('yzm')) return cur;
+                                        cur = p;
+                                    }
+                                    return null;
+                                }
+                                var yzmInput = document.getElementById('yzm') || document.querySelector('input[name="yzm"]');
+                                if (yzmInput) {
+                                    yzmInput.style.setProperty('min-width', '120px', 'important');
+                                    yzmInput.style.setProperty('padding', '6px 12px', 'important');
+                                    yzmInput.style.setProperty('box-sizing', 'border-box', 'important');
+                                    var inputChild = findRowChild(yzmInput);
+                                    if (inputChild && inputChild !== yzmInput) {
+                                        inputChild.style.setProperty('flex', '1 1 130px', 'important');
+                                        inputChild.style.setProperty('min-width', '120px', 'important');
+                                        inputChild.style.setProperty('width', 'auto', 'important');
+                                        yzmInput.style.setProperty('width', '100%', 'important');
+                                    } else {
+                                        yzmInput.style.setProperty('flex', '1 1 130px', 'important');
+                                        yzmInput.style.setProperty('width', 'auto', 'important');
+                                    }
+                                }
+                                var yzmImg = document.getElementById('yzmPic') || document.querySelector('img[src*="kaptcha"], img[src*="yzm"]');
+                                if (yzmImg) {
+                                    yzmImg.style.setProperty('max-width', '140px', 'important');
+                                    yzmImg.style.setProperty('height', '44px', 'important');
+                                    yzmImg.style.setProperty('width', 'auto', 'important');
+                                    var imgChild = findRowChild(yzmImg);
+                                    if (imgChild && imgChild !== yzmImg) {
+                                        imgChild.style.setProperty('flex', '0 0 auto', 'important');
+                                        imgChild.style.setProperty('width', 'auto', 'important');
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+                        fixLoginCaptchaRow();
+                        setTimeout(fixLoginCaptchaRow, 300);
+                    } else if (isJwxt) {
                         function forceNativeSelectsAndHideQr() {
                             try {
                                 var selects = document.querySelectorAll('select');

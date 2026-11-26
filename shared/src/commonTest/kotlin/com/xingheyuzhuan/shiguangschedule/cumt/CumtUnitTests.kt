@@ -347,6 +347,10 @@ class CumtUnitTests {
         assertNotNull(jwxtJs)
         assertTrue(jwxtJs.contains("viewport"))
         assertTrue(jwxtJs.contains("cumt-mobile-adapt"))
+        assertTrue(jwxtJs.contains("flex-wrap: wrap"))
+        assertTrue(jwxtJs.contains("min-width: 120px"))
+        assertTrue(jwxtJs.contains("max-width: 140px"))
+        assertTrue(jwxtJs.contains("fixLoginCaptchaRow"))
 
         val jwxtScoreCss = CumtWebScripts.mobileAdaptationJs("http://jwxt.cumt.edu.cn/jwglxt/cjcx/cjcx_cxDgXscj.html?gnmkdm=N305005")
         assertNotNull(jwxtScoreCss)

@@ -28,6 +28,7 @@ import com.xingheyuzhuan.shiguangschedule.data.model.StartScreen
 import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdaptiveNavigationScaffold
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CampusDiscoverScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAiCourseImportScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAuthScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusCardScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtCampusNetScreen
@@ -222,6 +223,7 @@ fun ScreenContent(
 
         Destination.CumtAuth -> CumtAuthScreen(onNavigate, onBack)
         Destination.CumtCourseImport -> CumtCourseImportScreen(onNavigate, onBack)
+        Destination.CumtAiCourseImport -> CumtAiCourseImportScreen(onNavigate, onBack)
         is Destination.CumtJwxtExtract -> CumtJwxtExtractScreen(targetDest.mode, onBack)
         Destination.CumtExams -> CumtExamScreen(onNavigate, onBack)
         Destination.CumtScores -> CumtScoreScreen(onNavigate, onBack)

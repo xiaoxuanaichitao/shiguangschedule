@@ -38,6 +38,7 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.koinInject
 import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.chevron_right_24px
+import shiguangschedule.shared.generated.resources.image_24px
 import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.school_24px
 import shiguangschedule.shared.generated.resources.sync_alt_24px
@@ -166,7 +167,7 @@ fun CumtCourseImportScreen(
 
             CumtSectionHeader(
                 title = "选择导入方式",
-                subtitle = "支持正方本科教务、研究生院与标准课表文件",
+                subtitle = "支持正方本科教务、研究生院、AI 识图与标准课表文件",
                 modifier = Modifier.padding(top = 2.dp)
             )
 
@@ -206,6 +207,16 @@ fun CumtCourseImportScreen(
 
             ImportEntryCard(
                 stepLabel = "03",
+                icon = Res.drawable.image_24px,
+                accent = CumtAccent.VIOLET,
+                title = "AI 识图导实验 / 课表",
+                subtitle = "自定义你的 AI API Key，上传实验安排表或课表截图即可自动识别周次、星期、节次与实验室，支持编辑后追加导入到现有课表。",
+                badge = "AI 识图 · 支持实验表",
+                onClick = { onNavigate(Destination.CumtAiCourseImport) }
+            )
+
+            ImportEntryCard(
+                stepLabel = "04",
                 icon = Res.drawable.sync_alt_24px,
                 accent = CumtAccent.TEAL,
                 title = "本地 JSON / ICS 导入与导出",

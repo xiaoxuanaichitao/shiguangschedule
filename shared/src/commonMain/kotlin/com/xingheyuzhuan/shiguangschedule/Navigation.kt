@@ -59,6 +59,7 @@ sealed interface Destination : NavKey {
     // --- 中国矿业大学专属功能页面 ---
     @Serializable data object CumtAuth : Destination
     @Serializable data object CumtCourseImport : Destination
+    @Serializable data object CumtAiCourseImport : Destination
     @Serializable data class CumtJwxtExtract(val mode: CumtExtractMode) : Destination
     @Serializable data object CumtExams : Destination
     @Serializable data object CumtScores : Destination
@@ -136,6 +137,7 @@ val navSerializersModule = SerializersModule {
         // 矿大专属功能页面
         subclass(Destination.CumtAuth::class)
         subclass(Destination.CumtCourseImport::class)
+        subclass(Destination.CumtAiCourseImport::class)
         subclass(Destination.CumtJwxtExtract::class)
         subclass(Destination.CumtExams::class)
         subclass(Destination.CumtScores::class)

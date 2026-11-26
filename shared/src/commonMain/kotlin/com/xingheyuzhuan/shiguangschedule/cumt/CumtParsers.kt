@@ -1109,4 +1109,221 @@ object CumtParsers {
             ?.get(1)
             ?.toDoubleOrNull()
     }
+
+    // ==================== AI 识图课表/实验表解析 ====================
+
+    /**
+     * 解析 AI 视觉模型返回的课表/实验安排 JSON。
+     * 兼容以下格式：
+     * - `{"courses": [...]}` 或直接 `[...]`
+     * - 被 Markdown ```json ... ``` 或说明文字包裹的响应
+     * - day 支持 1..7 或中文 "星期6"/"周日"
+     * - weeks 支持整数数组 `[11]`、单整数 `11`、或字符串 `"11周"` / `"11-12周"` / `"1-7单周"`
+     * - 自动跳过缺少有效星期、节次或周次的未排课行
+     */
+    fun parseAiRecognizedCoursesJson(rawContent: String): List<CumtAiRecognizedCourse> {
+        val jsonPayload = extractJsonBlock(rawContent) ?: return emptyList()
+        val root = runCatching { lenientJson.parseToJsonElement(jsonPayload) }.getOrNull() ?: return emptyList()
+
+        val itemsArray = when (root) {
+            is kotlinx.serialization.json.JsonArray -> root
+            is kotlinx.serialization.json.JsonObject -> {
+                root["courses"] as? kotlinx.serialization.json.JsonArray
+                    ?: root["items"] as? kotlinx.serialization.json.JsonArray
+                    ?: root["data"] as? kotlinx.serialization.json.JsonArray
+                    ?: root["schedule"] as? kotlinx.serialization.json.JsonArray
+                    ?: root["experiments"] as? kotlinx.serialization.json.JsonArray
+            }
+            else -> null
+        } ?: return emptyList()
+
+        val results = mutableListOf<CumtAiRecognizedCourse>()
+        val seenKeys = HashSet<String>()
+
+        itemsArray.forEachIndexed { index, element ->
+            val obj = element as? kotlinx.serialization.json.JsonObject ?: return@forEachIndexed
+            val rawName = firstNonBlankString(obj, "name", "courseName", "title", "projectName", "项目名称", "课程名称")
+                ?: return@forEachIndexed
+            val name = rawName.trim()
+            if (name.isBlank()) return@forEachIndexed
+
+            val day = parseAiDayOfWeek(obj) ?: return@forEachIndexed
+            val sectionPair = parseAiSectionRange(obj) ?: return@forEachIndexed
+            val startSection = sectionPair.first.coerceIn(1, 20)
+            val endSection = sectionPair.second.coerceIn(startSection, 20)
+
+            val weeks = parseAiWeeksField(obj)
+            if (weeks.isEmpty()) return@forEachIndexed
+
+            val teacher = firstNonBlankString(obj, "teacher", "instructor", "教师", "老师").orEmpty().trim()
+            val position = firstNonBlankString(obj, "position", "location", "room", "classroom", "lab", "地点", "教室", "实验室").orEmpty().trim()
+            val remark = firstNonBlankString(obj, "remark", "note", "batch", "备注", "批次").orEmpty().trim()
+
+            val dedupKey = "${name}|${day}|${startSection}|${endSection}|${weeks.joinToString(",")}|${position}"
+            if (!seenKeys.add(dedupKey)) return@forEachIndexed
+
+            results.add(
+                CumtAiRecognizedCourse(
+                    id = "ai_${index}_${dedupKey.hashCode().toUInt().toString(16)}",
+                    name = name,
+                    teacher = teacher,
+                    position = position,
+                    day = day,
+                    startSection = startSection,
+                    endSection = endSection,
+                    weeks = weeks,
+                    remark = remark,
+                    selected = true
+                )
+            )
+        }
+
+        return results
+    }
+
+    private fun extractJsonBlock(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+
+        // 优先提取 ```json ... ``` 或 ``` ... ``` 代码块
+        val fenceRegex = Regex("""```(?:json)?\s*([\s\S]*?)```""", RegexOption.IGNORE_CASE)
+        val fenced = fenceRegex.find(trimmed)?.groupValues?.get(1)?.trim()
+        val candidate = if (!fenced.isNullOrBlank()) fenced else trimmed
+
+        if (candidate.startsWith("{") || candidate.startsWith("[")) {
+            return candidate
+        }
+
+        val firstObj = candidate.indexOf('{')
+        val firstArr = candidate.indexOf('[')
+        val startIdx = when {
+            firstObj >= 0 && firstArr >= 0 -> minOf(firstObj, firstArr)
+            firstObj >= 0 -> firstObj
+            firstArr >= 0 -> firstArr
+            else -> return null
+        }
+        val openChar = candidate[startIdx]
+        val closeChar = if (openChar == '{') '}' else ']'
+        val endIdx = candidate.lastIndexOf(closeChar)
+        if (endIdx <= startIdx) return null
+        return candidate.substring(startIdx, endIdx + 1)
+    }
+
+    private fun firstNonBlankString(obj: kotlinx.serialization.json.JsonObject, vararg keys: String): String? {
+        for (key in keys) {
+            val elem = obj[key] ?: continue
+            val text = (elem as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull?.trim()
+            if (!text.isNullOrBlank() && !text.equals("null", ignoreCase = true)) {
+                return text
+            }
+        }
+        return null
+    }
+
+    private fun parseAiDayOfWeek(obj: kotlinx.serialization.json.JsonObject): Int? {
+        val raw = firstNonBlankString(obj, "day", "dayOfWeek", "weekday", "weekDay", "星期", "周几") ?: return null
+        raw.toIntOrNull()?.let { n ->
+            return if (n in 1..7) n else null
+        }
+        return when {
+            raw.contains("一") || raw.contains("1") -> 1
+            raw.contains("二") || raw.contains("2") -> 2
+            raw.contains("三") || raw.contains("3") -> 3
+            raw.contains("四") || raw.contains("4") -> 4
+            raw.contains("五") || raw.contains("5") -> 5
+            raw.contains("六") || raw.contains("6") -> 6
+            raw.contains("日") || raw.contains("天") || raw.contains("7") -> 7
+            else -> null
+        }
+    }
+
+    private fun parseAiSectionRange(obj: kotlinx.serialization.json.JsonObject): Pair<Int, Int>? {
+        val startDirect = firstNonBlankString(obj, "startSection", "start_section", "start", "起始节")
+            ?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+        val endDirect = firstNonBlankString(obj, "endSection", "end_section", "end", "结束节")
+            ?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+        if (startDirect != null && startDirect in 1..20) {
+            val resolvedEnd = (endDirect ?: startDirect).coerceAtLeast(startDirect)
+            return startDirect to resolvedEnd
+        }
+
+        val combined = firstNonBlankString(obj, "sections", "section", "period", "节次", "节") ?: return null
+        val nums = Regex("""\d+""").findAll(combined).mapNotNull { it.value.toIntOrNull() }.toList()
+        if (nums.isEmpty()) return null
+        val s = nums.first()
+        val e = nums.last().coerceAtLeast(s)
+        return if (s in 1..20) s to e else null
+    }
+
+    private fun parseAiWeeksField(obj: kotlinx.serialization.json.JsonObject): List<Int> {
+        val keys = listOf("weeks", "week", "weekList", "周次", "周")
+        for (key in keys) {
+            val elem = obj[key] ?: continue
+            when (elem) {
+                is kotlinx.serialization.json.JsonArray -> {
+                    val ints = elem.mapNotNull { item ->
+                        val prim = item as? kotlinx.serialization.json.JsonPrimitive ?: return@mapNotNull null
+                        prim.contentOrNull?.trim()?.let { text ->
+                            text.toIntOrNull() ?: Regex("""\d+""").find(text)?.value?.toIntOrNull()
+                        }
+                    }.filter { it in 1..30 }.distinct().sorted()
+                    if (ints.isNotEmpty()) return ints
+                }
+                is kotlinx.serialization.json.JsonPrimitive -> {
+                    val text = elem.contentOrNull?.trim().orEmpty()
+                    if (text.isNotEmpty() && !text.equals("null", ignoreCase = true)) {
+                        val parsed = parseManualWeeksInput(text)
+                        if (parsed.isNotEmpty()) return parsed
+                    }
+                }
+                else -> Unit
+            }
+        }
+        return emptyList()
+    }
+
+    fun parseManualWeeksInput(input: String): List<Int> {
+        val cleaned = input.trim()
+        if (cleaned.isEmpty()) return emptyList()
+        // 复用现有的矿大周次解析器（支持 "1-4周", "1-7单周", "11,13周" 等）
+        val byExisting = parseWeekTokens(cleaned).filter { it in 1..30 }
+        if (byExisting.isNotEmpty()) return byExisting
+        return Regex("""\d+""").findAll(cleaned)
+            .mapNotNull { it.value.toIntOrNull() }
+            .filter { it in 1..30 }
+            .distinct()
+            .sorted()
+            .toList()
+    }
+
+    fun formatWeeksCompact(weeks: List<Int>): String {
+        val sorted = weeks.filter { it > 0 }.distinct().sorted()
+        if (sorted.isEmpty()) return ""
+        val parts = mutableListOf<String>()
+        var rangeStart = sorted.first()
+        var prev = sorted.first()
+        for (i in 1 until sorted.size) {
+            val cur = sorted[i]
+            if (cur == prev + 1) {
+                prev = cur
+            } else {
+                parts.add(if (rangeStart == prev) "$rangeStart" else "$rangeStart-$prev")
+                rangeStart = cur
+                prev = cur
+            }
+        }
+        parts.add(if (rangeStart == prev) "$rangeStart" else "$rangeStart-$prev")
+        return parts.joinToString(",")
+    }
+
+    fun formatDayOfWeekLabel(day: Int): String = when (day) {
+        1 -> "周一"
+        2 -> "周二"
+        3 -> "周三"
+        4 -> "周四"
+        5 -> "周五"
+        6 -> "周六"
+        7 -> "周日"
+        else -> "周$day"
+    }
 }

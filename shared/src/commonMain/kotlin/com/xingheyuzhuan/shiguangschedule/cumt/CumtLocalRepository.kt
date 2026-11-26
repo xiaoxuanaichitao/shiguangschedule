@@ -45,6 +45,14 @@ class CumtLocalRepository(
         val KEY_NET_AUTO_LOGIN = booleanPreferencesKey("cumt_net_auto_login")
         val KEY_NET_LAST_CAMPUS = stringPreferencesKey("cumt_net_last_campus")
         val KEY_NET_LAST_ISP = stringPreferencesKey("cumt_net_last_isp")
+
+        val KEY_AI_PROVIDER_ID = stringPreferencesKey("cumt_ai_provider_id")
+        val KEY_AI_BASE_URL = stringPreferencesKey("cumt_ai_base_url")
+        val KEY_AI_MODEL = stringPreferencesKey("cumt_ai_model")
+        val KEY_AI_PROTOCOL = stringPreferencesKey("cumt_ai_protocol")
+        val KEY_AI_ENC_API_KEY = stringPreferencesKey("cumt_ai_enc_api_key")
+        val KEY_AI_API_KEY_IV = stringPreferencesKey("cumt_ai_api_key_iv")
+        val KEY_AI_PLAIN_FALLBACK = stringPreferencesKey("cumt_ai_plain_fallback")
     }
 
     // ==================== 统一身份认证凭据 ====================
@@ -315,6 +323,71 @@ class CumtLocalRepository(
         dataStore.edit { prefs ->
             prefs[KEY_NET_ACCOUNTS_JSON] =
                 json.encodeToString(ListSerializer(CampusNetAccount.serializer()), updated)
+        }
+    }
+
+    // ==================== AI 识图 API Key 配置 ====================
+
+    val aiConfigFlow: Flow<CumtAiConfig> = dataStore.data.map { prefs ->
+        val preset = CumtAiProviderPreset.fromId(prefs[KEY_AI_PROVIDER_ID])
+        val hasKey = !prefs[KEY_AI_ENC_API_KEY].isNullOrEmpty() ||
+            !prefs[KEY_AI_PLAIN_FALLBACK].isNullOrEmpty()
+        CumtAiConfig(
+            providerId = preset.id,
+            baseUrl = prefs[KEY_AI_BASE_URL] ?: preset.defaultBaseUrl,
+            model = prefs[KEY_AI_MODEL] ?: preset.defaultModel,
+            protocol = prefs[KEY_AI_PROTOCOL] ?: preset.protocol.name,
+            hasApiKey = hasKey
+        )
+    }
+
+    suspend fun getSavedAiApiKey(): String {
+        val prefs = dataStore.data.first()
+        val enc = prefs[KEY_AI_ENC_API_KEY].orEmpty()
+        val iv = prefs[KEY_AI_API_KEY_IV].orEmpty()
+        val decrypted = if (enc.isNotEmpty() && iv.isNotEmpty()) {
+            secureCrypto.decrypt(enc, iv)
+        } else {
+            null
+        }
+        return (decrypted ?: prefs[KEY_AI_PLAIN_FALLBACK].orEmpty()).trim()
+    }
+
+    suspend fun saveAiConfig(
+        providerId: String,
+        baseUrl: String,
+        model: String,
+        protocol: CumtAiProtocol,
+        apiKey: String
+    ) {
+        val trimmedKey = apiKey.trim()
+        val crypto = if (trimmedKey.isNotEmpty()) secureCrypto.encrypt(trimmedKey) else null
+        dataStore.edit { prefs ->
+            prefs[KEY_AI_PROVIDER_ID] = providerId
+            prefs[KEY_AI_BASE_URL] = baseUrl.trim()
+            prefs[KEY_AI_MODEL] = model.trim()
+            prefs[KEY_AI_PROTOCOL] = protocol.name
+            if (trimmedKey.isEmpty()) {
+                prefs.remove(KEY_AI_ENC_API_KEY)
+                prefs.remove(KEY_AI_API_KEY_IV)
+                prefs.remove(KEY_AI_PLAIN_FALLBACK)
+            } else if (crypto != null) {
+                prefs[KEY_AI_ENC_API_KEY] = crypto.encryptedData
+                prefs[KEY_AI_API_KEY_IV] = crypto.iv
+                prefs.remove(KEY_AI_PLAIN_FALLBACK)
+            } else {
+                prefs.remove(KEY_AI_ENC_API_KEY)
+                prefs.remove(KEY_AI_API_KEY_IV)
+                prefs[KEY_AI_PLAIN_FALLBACK] = trimmedKey
+            }
+        }
+    }
+
+    suspend fun clearAiApiKey() {
+        dataStore.edit { prefs ->
+            prefs.remove(KEY_AI_ENC_API_KEY)
+            prefs.remove(KEY_AI_API_KEY_IV)
+            prefs.remove(KEY_AI_PLAIN_FALLBACK)
         }
     }
 }

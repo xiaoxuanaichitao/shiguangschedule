@@ -49,6 +49,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAccountProfile
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiConfig
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtCampusCardInfo
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtDormCampus
@@ -82,6 +83,7 @@ import shiguangschedule.shared.generated.resources.chevron_right_24px
 import shiguangschedule.shared.generated.resources.cloud_24px
 import shiguangschedule.shared.generated.resources.credit_card_24px
 import shiguangschedule.shared.generated.resources.directions_bus_24px
+import shiguangschedule.shared.generated.resources.image_24px
 import shiguangschedule.shared.generated.resources.menu_book_24px
 import shiguangschedule.shared.generated.resources.refresh_24px
 import shiguangschedule.shared.generated.resources.schedule_24px
@@ -124,6 +126,12 @@ class CampusDiscoverViewModel(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
+    )
+
+    val aiConfig: StateFlow<CumtAiConfig> = localRepo.aiConfigFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = CumtAiConfig()
     )
 
     private val _isRefreshingCard = MutableStateFlow(false)
@@ -209,6 +217,7 @@ fun CampusDiscoverScreen(
     val dormPower by viewModel.dormPower.collectAsState()
     val exams by viewModel.exams.collectAsState()
     val scores by viewModel.scores.collectAsState()
+    val aiConfig by viewModel.aiConfig.collectAsState()
     val isRefreshingCard by viewModel.isRefreshingCard.collectAsState()
     val isRefreshingPower by viewModel.isRefreshingPower.collectAsState()
 
@@ -244,6 +253,14 @@ fun CampusDiscoverScreen(
             icon = Res.drawable.school_24px,
             accent = CumtAccent.INDIGO,
             onClick = { onNavigate(Destination.CumtCourseImport) }
+        ),
+        DiscoverToolItem(
+            title = "AI 识图导课",
+            subtitle = "实验表截图与 API Key",
+            icon = Res.drawable.image_24px,
+            accent = CumtAccent.VIOLET,
+            badge = if (aiConfig.hasApiKey) "已配置" else "配置 Key",
+            onClick = { onNavigate(Destination.CumtAiCourseImport) }
         ),
         DiscoverToolItem(
             title = "考试倒计时",

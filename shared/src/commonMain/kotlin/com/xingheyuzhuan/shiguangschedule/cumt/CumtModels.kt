@@ -341,3 +341,105 @@ data class CampusNetActionResult(
     val message: String,
     val alreadyLoggedIn: Boolean = false
 )
+
+enum class CumtAiProtocol(val displayName: String) {
+    OPENAI_COMPATIBLE("OpenAI 兼容接口"),
+    GEMINI("Google Gemini 原生");
+
+    companion object {
+        fun fromName(name: String?): CumtAiProtocol =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: OPENAI_COMPATIBLE
+    }
+}
+
+enum class CumtAiProviderPreset(
+    val id: String,
+    val displayName: String,
+    val protocol: CumtAiProtocol,
+    val defaultBaseUrl: String,
+    val defaultModel: String,
+    val hint: String
+) {
+    SILICONFLOW(
+        id = "siliconflow",
+        displayName = "硅基流动",
+        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
+        defaultBaseUrl = "https://api.siliconflow.cn/v1",
+        defaultModel = "Qwen/Qwen2.5-VL-72B-Instruct",
+        hint = "国内直连，Qwen2.5-VL 识别中文实验排表准确度高"
+    ),
+    QWEN_DASHSCOPE(
+        id = "dashscope",
+        displayName = "阿里百炼",
+        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
+        defaultBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        defaultModel = "qwen-vl-max",
+        hint = "阿里云通义千问视觉大模型（OpenAI 兼容）"
+    ),
+    ZHIPU(
+        id = "zhipu",
+        displayName = "智谱 GLM",
+        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
+        defaultBaseUrl = "https://open.bigmodel.cn/api/paas/v4",
+        defaultModel = "glm-4v-flash",
+        hint = "GLM-4V-Flash 免费额度友好，国内直连"
+    ),
+    GEMINI(
+        id = "gemini",
+        displayName = "Gemini",
+        protocol = CumtAiProtocol.GEMINI,
+        defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+        defaultModel = "gemini-2.5-flash",
+        hint = "Google 原生多模态接口，表格与红框标注识别优秀"
+    ),
+    OPENAI(
+        id = "openai",
+        displayName = "OpenAI",
+        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
+        defaultBaseUrl = "https://api.openai.com/v1",
+        defaultModel = "gpt-4o-mini",
+        hint = "OpenAI 官方视觉接口"
+    ),
+    CUSTOM(
+        id = "custom",
+        displayName = "自定义",
+        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
+        defaultBaseUrl = "",
+        defaultModel = "",
+        hint = "兼容豆包 / OneAPI / NewAPI 等任意支持视觉的模型端点"
+    );
+
+    companion object {
+        fun fromId(id: String?): CumtAiProviderPreset =
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: SILICONFLOW
+    }
+}
+
+@Serializable
+data class CumtAiConfig(
+    val providerId: String = CumtAiProviderPreset.SILICONFLOW.id,
+    val baseUrl: String = CumtAiProviderPreset.SILICONFLOW.defaultBaseUrl,
+    val model: String = CumtAiProviderPreset.SILICONFLOW.defaultModel,
+    val protocol: String = CumtAiProviderPreset.SILICONFLOW.protocol.name,
+    val hasApiKey: Boolean = false
+) {
+    val presetEnum: CumtAiProviderPreset
+        get() = CumtAiProviderPreset.fromId(providerId)
+
+    val protocolEnum: CumtAiProtocol
+        get() = CumtAiProtocol.fromName(protocol)
+}
+
+@Serializable
+data class CumtAiRecognizedCourse(
+    val id: String,
+    val name: String,
+    val teacher: String = "",
+    val position: String = "",
+    val day: Int,
+    val startSection: Int,
+    val endSection: Int,
+    val weeks: List<Int>,
+    val remark: String = "",
+    val selected: Boolean = true
+)

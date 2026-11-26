@@ -45,3 +45,32 @@ actual suspend fun cropImageBitmapNative(
         stream.toByteArray()
     }
 }
+
+actual suspend fun encodeImageBitmapForAi(
+    source: ImageBitmap,
+    maxDimension: Int,
+    quality: Int
+): ByteArray = withContext(Dispatchers.Default) {
+    val androidBitmap = source.asAndroidBitmap()
+    val w = androidBitmap.width.coerceAtLeast(1)
+    val h = androidBitmap.height.coerceAtLeast(1)
+    val maxSide = maxOf(w, h)
+    val targetBitmap = if (maxSide > maxDimension && maxDimension > 0) {
+        val ratio = maxDimension.toFloat() / maxSide.toFloat()
+        val targetW = (w * ratio).toInt().coerceAtLeast(1)
+        val targetH = (h * ratio).toInt().coerceAtLeast(1)
+        Bitmap.createScaledBitmap(androidBitmap, targetW, targetH, true)
+    } else {
+        androidBitmap
+    }
+    try {
+        ByteArrayOutputStream().use { stream ->
+            targetBitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(50, 95), stream)
+            stream.toByteArray()
+        }
+    } finally {
+        if (targetBitmap !== androidBitmap) {
+            targetBitmap.recycle()
+        }
+    }
+}

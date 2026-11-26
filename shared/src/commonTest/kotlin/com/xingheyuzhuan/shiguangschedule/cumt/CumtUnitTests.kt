@@ -709,4 +709,118 @@ class CumtUnitTests {
         val defaultDensity = Density(density = 2.0f, fontScale = 1.0f)
         assertEquals(defaultDensity, defaultDensity.withDefaultFontScale())
     }
+
+    @Test
+    fun aiRecognizedCoursesParserHandlesLabScheduleAndSkipsIncompleteRows() {
+        val sampleResponse = """
+            ```json
+            {
+              "courses": [
+                {
+                  "name": "二阶系统的动态性能分析",
+                  "teacher": "周晨",
+                  "position": "信控-A205",
+                  "day": 6,
+                  "startSection": 1,
+                  "endSection": 2,
+                  "weeks": [11],
+                  "remark": "第1次 · 第1批 · 2学时"
+                },
+                {
+                  "name": "典型环节和系统频率特性的测量",
+                  "teacher": "周晨",
+                  "position": "信控-A205",
+                  "day": "星期6",
+                  "sections": "3-4",
+                  "weeks": "11周",
+                  "remark": "第1次 · 第1批 · 2学时"
+                },
+                {
+                  "name": "基于MATLAB的现代控制理论分析与设计",
+                  "teacher": "周晨",
+                  "position": "信控-A205",
+                  "day": "星期7",
+                  "startSection": 1,
+                  "endSection": 4,
+                  "weeks": [12],
+                  "remark": "第1次 · 第1批 · 4学时"
+                },
+                {
+                  "name": "倒立摆的建模与控制",
+                  "teacher": "周晨",
+                  "position": "",
+                  "day": null,
+                  "startSection": null,
+                  "endSection": null,
+                  "weeks": []
+                }
+              ]
+            }
+            ```
+        """.trimIndent()
+
+        val parsed = CumtParsers.parseAiRecognizedCoursesJson(sampleResponse)
+        assertEquals(3, parsed.size)
+
+        assertEquals("二阶系统的动态性能分析", parsed[0].name)
+        assertEquals("周晨", parsed[0].teacher)
+        assertEquals("信控-A205", parsed[0].position)
+        assertEquals(6, parsed[0].day)
+        assertEquals(1, parsed[0].startSection)
+        assertEquals(2, parsed[0].endSection)
+        assertEquals(listOf(11), parsed[0].weeks)
+
+        assertEquals(6, parsed[1].day)
+        assertEquals(3, parsed[1].startSection)
+        assertEquals(4, parsed[1].endSection)
+        assertEquals(listOf(11), parsed[1].weeks)
+
+        assertEquals(7, parsed[2].day)
+        assertEquals(1, parsed[2].startSection)
+        assertEquals(4, parsed[2].endSection)
+        assertEquals(listOf(12), parsed[2].weeks)
+    }
+
+    @Test
+    fun aiCourseServiceEndpointsPayloadsAndWeekHelpersWork() {
+        assertEquals(
+            "https://api.siliconflow.cn/v1/chat/completions",
+            CumtAiCourseService.buildOpenAiChatEndpoint("https://api.siliconflow.cn/v1/")
+        )
+        assertEquals(
+            "https://api.openai.com/v1/chat/completions",
+            CumtAiCourseService.buildOpenAiChatEndpoint("https://api.openai.com/v1/chat/completions")
+        )
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            CumtAiCourseService.buildGeminiEndpoint(
+                "https://generativelanguage.googleapis.com/v1beta/",
+                "gemini-2.5-flash"
+            )
+        )
+
+        val openAiPayload = CumtAiCourseService.buildOpenAiVisionPayload(
+            model = "Qwen/Qwen2.5-VL-72B-Instruct",
+            mimeType = "image/jpeg",
+            base64Image = "AAAA",
+            userHint = "只识别红框里的"
+        )
+        assertTrue(openAiPayload.contains("Qwen/Qwen2.5-VL-72B-Instruct"))
+        assertTrue(openAiPayload.contains("data:image/jpeg;base64,AAAA"))
+        assertTrue(openAiPayload.contains("只识别红框里的"))
+
+        val geminiPayload = CumtAiCourseService.buildGeminiVisionPayload(
+            mimeType = "image/jpeg",
+            base64Image = "BBBB",
+            userHint = "第1批"
+        )
+        assertTrue(geminiPayload.contains("\"inlineData\""))
+        assertTrue(geminiPayload.contains("\"data\":\"BBBB\""))
+        assertTrue(geminiPayload.contains("第1批"))
+
+        assertEquals(listOf(11, 12, 13, 15), CumtParsers.parseManualWeeksInput("11-13, 15"))
+        assertEquals("11-13,15", CumtParsers.formatWeeksCompact(listOf(15, 11, 12, 13)))
+        assertEquals("周六", CumtParsers.formatDayOfWeekLabel(6))
+        assertEquals("周日", CumtParsers.formatDayOfWeekLabel(7))
+    }
 }

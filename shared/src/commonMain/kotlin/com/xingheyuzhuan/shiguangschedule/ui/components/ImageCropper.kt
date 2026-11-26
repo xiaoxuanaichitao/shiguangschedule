@@ -277,3 +277,12 @@ expect suspend fun cropImageBitmapNative(
     cropWidth: Int,
     cropHeight: Int
 ): ByteArray
+
+/**
+ * 将图片按最大边长缩放并压缩为 JPEG 字节数组，用于 AI 视觉接口上传。
+ */
+expect suspend fun encodeImageBitmapForAi(
+    source: ImageBitmap,
+    maxDimension: Int = 1920,
+    quality: Int = 85
+): ByteArray

@@ -6,6 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Surface
 
 /**
  * JVM / Desktop 端关闭裁切预览 UI 弹窗（直接使用原图）
@@ -29,4 +31,28 @@ actual suspend fun cropImageBitmapNative(
     val data = image.encodeToData(EncodedImageFormat.JPEG, 90)
 
     data?.bytes ?: throw IllegalStateException("Desktop image encoding failed")
+}
+
+actual suspend fun encodeImageBitmapForAi(
+    source: ImageBitmap,
+    maxDimension: Int,
+    quality: Int
+): ByteArray = withContext(Dispatchers.IO) {
+    val skiaBitmap = source.asSkiaBitmap()
+    val image = Image.makeFromBitmap(skiaBitmap)
+    val w = skiaBitmap.width.coerceAtLeast(1)
+    val h = skiaBitmap.height.coerceAtLeast(1)
+    val maxSide = maxOf(w, h)
+    val finalImage = if (maxSide > maxDimension && maxDimension > 0) {
+        val ratio = maxDimension.toFloat() / maxSide.toFloat()
+        val targetW = (w * ratio).toInt().coerceAtLeast(1)
+        val targetH = (h * ratio).toInt().coerceAtLeast(1)
+        val surface = Surface.makeRasterN32Premul(targetW, targetH)
+        surface.canvas.drawImageRect(image, Rect.makeWH(targetW.toFloat(), targetH.toFloat()))
+        surface.makeImageSnapshot()
+    } else {
+        image
+    }
+    val data = finalImage.encodeToData(EncodedImageFormat.JPEG, quality.coerceIn(50, 95))
+    data?.bytes ?: throw IllegalStateException("Desktop AI image encoding failed")
 }

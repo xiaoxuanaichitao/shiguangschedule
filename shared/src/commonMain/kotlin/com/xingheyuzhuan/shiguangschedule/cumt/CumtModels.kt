@@ -51,11 +51,6 @@ object CumtConstants {
     // 校园网 DR.COM
     const val CAMPUS_NET_PORTAL_URL = "http://10.2.5.251:801/eportal/"
     const val CAMPUS_NET_SELF_SERVICE_URL = "http://202.119.196.6:8080/Self/login/"
-
-    // 免费 AI 体验中转通道（部署 cloudflare-ai-proxy 后填入你的 Worker 地址，例如 "https://xxx.workers.dev/v1"）
-    // 留空时默认展示 DeepSeek，用户仍可在「免费体验」中自行填入中转地址；填入后重新打包即可全员免 Key 开箱即用
-    const val FREE_AI_PROXY_BASE_URL = "https://shiguang-free-ai-proxy.277956tao.workers.dev/v1"
-    const val FREE_AI_CLIENT_HEADER = "cumt-shiguang-app"
 }
 
 @Serializable
@@ -363,17 +358,8 @@ enum class CumtAiProviderPreset(
     val protocol: CumtAiProtocol,
     val defaultBaseUrl: String,
     val defaultModel: String,
-    val hint: String = "",
-    val requiresApiKey: Boolean = true
+    val hint: String = ""
 ) {
-    FREE_PROXY(
-        id = "free_proxy",
-        displayName = "免费体验",
-        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
-        defaultBaseUrl = CumtConstants.FREE_AI_PROXY_BASE_URL,
-        defaultModel = "cumt-free-auto",
-        requiresApiKey = false
-    ),
     DEEPSEEK(
         id = "deepseek",
         displayName = "DeepSeek",
@@ -462,12 +448,6 @@ data class CumtAiConfig(
 
     val orbIconStyleEnum: CumtAiOrbIconStyle
         get() = CumtAiOrbIconStyle.fromId(floatingOrbIconStyle)
-
-    val isKeylessProxy: Boolean
-        get() = !presetEnum.requiresApiKey
-
-    val isReadyToChat: Boolean
-        get() = if (isKeylessProxy) baseUrl.isNotBlank() else hasApiKey
 }
 
 @Serializable
@@ -498,13 +478,6 @@ data class CumtAiProviderSlot(
 ) {
     val hasKey: Boolean
         get() = encryptedApiKey.isNotEmpty() || plainFallbackKey.isNotEmpty()
-
-    val isConfigured: Boolean
-        get() = if (!CumtAiProviderPreset.fromId(providerId).requiresApiKey) {
-            baseUrl.isNotBlank()
-        } else {
-            hasKey
-        }
 
     val effectiveName: String
         get() = displayName.ifBlank { CumtAiProviderPreset.fromId(providerId).displayName }

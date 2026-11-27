@@ -51,9 +51,6 @@ class CumtAiSessionRepository(
     private val _modelFetchNotice = MutableStateFlow<String?>(null)
     val modelFetchNotice: StateFlow<String?> = _modelFetchNotice.asStateFlow()
 
-    private val _freeQuotaText = MutableStateFlow<String?>(null)
-    val freeQuotaText: StateFlow<String?> = _freeQuotaText.asStateFlow()
-
     init {
         scope.launch {
             val saved = localRepo.loadSavedChatHistory()
@@ -110,21 +107,13 @@ class CumtAiSessionRepository(
         baseUrl: String,
         apiKey: String,
         providerIdOverride: String? = null,
-        allowEmptyKey: Boolean = false,
         onModelsLoaded: (List<CumtAiModelInfo>) -> Unit = {}
     ) {
         if (_isFetchingModels.value) return
         scope.launch {
             _isFetchingModels.value = true
             _modelFetchNotice.value = null
-            val deviceId = if (allowEmptyKey) localRepo.getOrCreateAiDeviceId() else ""
-            aiService.fetchAvailableModels(
-                protocol = protocol,
-                baseUrl = baseUrl,
-                apiKey = apiKey,
-                allowEmptyKey = allowEmptyKey,
-                deviceId = deviceId
-            ).fold(
+            aiService.fetchAvailableModels(protocol, baseUrl, apiKey).fold(
                 onSuccess = { models ->
                     localRepo.saveCachedAiModels(models, providerIdOverride)
                     val visionCount = models.count { it.supportsVision }
@@ -155,17 +144,10 @@ class CumtAiSessionRepository(
         activeTurnJob = scope.launch {
             val config = localRepo.aiConfigFlow.first()
             val apiKey = localRepo.getSavedAiApiKey()
-            val ready = if (config.isKeylessProxy) config.baseUrl.isNotBlank() else apiKey.isNotBlank()
-            if (!ready) {
-                ToastManager.show(
-                    if (config.isKeylessProxy) "请先填写免费中转地址，或切换为自有 API Key"
-                    else "请先配置并保存 AI API Key"
-                )
+            if (apiKey.isBlank()) {
+                ToastManager.show("请先配置并保存 AI API Key")
                 onNeedApiKey()
                 return@launch
-            }
-            if (!config.isKeylessProxy) {
-                _freeQuotaText.value = null
             }
 
             val historySnapshot = _messages.value
@@ -183,7 +165,6 @@ class CumtAiSessionRepository(
 
             try {
                 val jpegBytes = image?.let { encodeImageBitmapForAi(it, maxDimension = 1920, quality = 85) }
-                val deviceId = if (config.isKeylessProxy) localRepo.getOrCreateAiDeviceId() else ""
                 aiService.runAssistantTurn(
                     config = config,
                     apiKey = apiKey,
@@ -192,13 +173,9 @@ class CumtAiSessionRepository(
                     imageBytes = jpegBytes,
                     mimeType = "image/jpeg",
                     contextHint = contextHint,
-                    toolEngine = toolEngine,
-                    deviceId = deviceId
+                    toolEngine = toolEngine
                 ).fold(
                     onSuccess = { turn ->
-                        if (turn.freeQuotaRemaining != null && turn.freeQuotaLimit != null) {
-                            _freeQuotaText.value = "今日免费剩余 ${turn.freeQuotaRemaining}/${turn.freeQuotaLimit} 次"
-                        }
                         val assistantMsg = CumtAiChatMessage(
                             id = "a_${Uuid.random().toString().take(8)}",
                             role = "assistant",

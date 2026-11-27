@@ -5,6 +5,7 @@ import java.net.URI
 
 actual object PlatformUpdateStrategy {
     actual val isUpdateSupported: Boolean = true
+    actual val supportsInAppInstall: Boolean = false
 
     /**
      * JVM 端直接返回 null，自动退回到 Releases 标签页链接
@@ -25,5 +26,15 @@ actual object PlatformUpdateStrategy {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    actual suspend fun downloadAndInstallApk(
+        candidateUrls: List<Pair<String, String>>,
+        versionTag: String,
+        onProgress: (UpdateDownloadState) -> Unit
+    ): Result<Unit> {
+        val fallback = candidateUrls.lastOrNull()?.second
+        if (!fallback.isNullOrBlank()) openUrl(fallback)
+        return Result.success(Unit)
     }
 }

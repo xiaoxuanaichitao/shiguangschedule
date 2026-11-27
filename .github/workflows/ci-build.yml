@@ -79,6 +79,8 @@ jobs:
   build-android:
     needs: [prepare-resources, unit-tests]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 检出代码 (Checkout)
         uses: actions/checkout@v4
@@ -145,6 +147,57 @@ jobs:
           path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: 准备自动更新 Release 资产与清单
+        id: prepare_release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          VERSION_CODE=$((37 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="2.1.0"
+          TAG_NAME="v${VERSION_NAME}-b${VERSION_CODE}"
+          APK_SRC=$(ls androidApp/build/outputs/apk/release/*.apk | head -n 1)
+          if [ -z "$APK_SRC" ]; then
+            echo "未找到 Release APK，跳过自动发布"
+            exit 0
+          fi
+          mkdir -p release_out
+          APK_NAME="ShiguangSchedule-CUMT-${TAG_NAME}.apk"
+          cp "$APK_SRC" "release_out/${APK_NAME}"
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -n 6)
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${APK_NAME}"
+          PAGE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
+          jq -n \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg tagName "$TAG_NAME" \
+            --arg changelog "$COMMIT_MSG" \
+            --arg apkUrl "$APK_URL" \
+            --arg fallbackPageUrl "$PAGE_URL" \
+            '{versionCode: $versionCode, versionName: $versionName, tagName: $tagName, changelog: $changelog, apkUrl: $apkUrl, fallbackPageUrl: $fallbackPageUrl}' \
+            > release_out/update-manifest.json
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "apk_file=release_out/${APK_NAME}" >> "$GITHUB_OUTPUT"
+          {
+            echo "changelog<<EOF"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 自动发布最新 GitHub Release（供 App 内自动更新）
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && steps.prepare_release.outputs.tag_name != ''
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.prepare_release.outputs.tag_name }}
+          name: "矿大时光课表 ${{ steps.prepare_release.outputs.tag_name }}"
+          body: ${{ steps.prepare_release.outputs.changelog }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            ${{ steps.prepare_release.outputs.apk_file }}
+            release_out/update-manifest.json
 
   build-desktop:
     if: github.event_name == 'workflow_dispatch'

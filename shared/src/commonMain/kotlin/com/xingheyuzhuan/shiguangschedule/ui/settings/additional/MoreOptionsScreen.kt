@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker
+import com.xingheyuzhuan.shiguangschedule.tool.UpdateDownloadState
 import com.xingheyuzhuan.shiguangschedule.tool.UpdatePlatform
 import com.xingheyuzhuan.shiguangschedule.tool.UpdateStatus
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
@@ -79,6 +80,7 @@ fun MoreOptionsScreen(
 
     // 从 Koin 动态获取注入的版本号
     val appVersionName: String = koinInject(named("AppVersionName"))
+    val appVersionCode: Int = koinInject(named("AppVersionCode"))
 
     // 状态观察
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -86,6 +88,7 @@ fun MoreOptionsScreen(
 
     // 更新逻辑相关状态
     var updateStatus by remember { mutableStateOf<UpdateStatus>(UpdateStatus.Idle) }
+    var downloadState by remember { mutableStateOf<UpdateDownloadState>(UpdateDownloadState.Idle) }
 
     // 弹窗可见性控制
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -94,9 +97,10 @@ fun MoreOptionsScreen(
     // 逻辑：执行更新检查
     val startUpdateCheck: (UpdatePlatform) -> Unit = { platform ->
         updateStatus = UpdateStatus.Checking
+        downloadState = UpdateDownloadState.Idle
         showUpdateDialog = true
         coroutineScope.launch {
-            updateStatus = updateChecker.checkUpdate(platform, appVersionName)
+            updateStatus = updateChecker.checkUpdate(platform, appVersionName, appVersionCode)
         }
     }
 
@@ -141,7 +145,10 @@ fun MoreOptionsScreen(
                     fontSize = 24.sp
                 )
                 Text(
-                    text = stringResource(Res.string.label_version_prefix, appVersionName),
+                    text = stringResource(
+                        Res.string.label_version_prefix,
+                        if (appVersionCode > 0) "$appVersionName (Build $appVersionCode)" else appVersionName
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -256,12 +263,21 @@ fun MoreOptionsScreen(
     UpdateResultDialog(
         showDialog = showUpdateDialog,
         updateStatus = updateStatus,
+        downloadState = downloadState,
         onDismiss = {
             showUpdateDialog = false
+            downloadState = UpdateDownloadState.Idle
             if (updateStatus !is UpdateStatus.Found) updateStatus = UpdateStatus.Idle
         },
-        onDownloadClick = { targetUrl ->
-            updateChecker.launchUpdate(targetUrl)
+        onDownloadClick = { found ->
+            coroutineScope.launch {
+                updateChecker.downloadAndInstall(found) { state ->
+                    downloadState = state
+                }
+            }
+        },
+        onBrowserDownloadClick = { pageUrl ->
+            updateChecker.launchUpdate(pageUrl)
         }
     )
 }

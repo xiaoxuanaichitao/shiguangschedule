@@ -978,34 +978,42 @@ class CumtUnitTests {
     }
 
     @Test
-    fun freeProxyAiConfigAllowsKeylessModeAndAutoVisionInference() {
-        assertEquals(CumtAiProviderPreset.FREE_PROXY, CumtAiProviderPreset.fromId("free_proxy"))
-        assertTrue(!CumtAiProviderPreset.FREE_PROXY.requiresApiKey)
-        assertTrue(CumtAiProviderPreset.DEEPSEEK.requiresApiKey)
+    fun autoUpdateVersionComparisonAndMirrorCandidatesWorkCorrectly() {
+        assertEquals(52, com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.parseBuildCodeFromTag("v2.1.0-b52"))
+        assertEquals(0, com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.parseBuildCodeFromTag("v2.1.0"))
 
-        val emptyFreeCfg = CumtAiConfig(
-            providerId = CumtAiProviderPreset.FREE_PROXY.id,
-            baseUrl = "",
-            model = "cumt-free-auto",
-            hasApiKey = false
+        // 同大版本下按 Build 号检测更新
+        assertTrue(
+            com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.isNewerRelease(
+                latestTag = "v2.1.0-b52",
+                latestVersionCode = 52,
+                currentVersionName = "2.1.0",
+                currentVersionCode = 51
+            )
         )
-        assertTrue(emptyFreeCfg.isKeylessProxy)
-        assertTrue(!emptyFreeCfg.isReadyToChat)
-
-        val activeFreeCfg = emptyFreeCfg.copy(baseUrl = "https://demo.workers.dev/v1")
-        assertTrue(activeFreeCfg.isKeylessProxy)
-        assertTrue(activeFreeCfg.isReadyToChat)
-
-        val deepseekWithoutKey = CumtAiConfig(
-            providerId = CumtAiProviderPreset.DEEPSEEK.id,
-            baseUrl = "https://api.deepseek.com/v1",
-            hasApiKey = false
+        assertTrue(
+            !com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.isNewerRelease(
+                latestTag = "v2.1.0-b51",
+                latestVersionCode = 51,
+                currentVersionName = "2.1.0",
+                currentVersionCode = 51
+            )
         )
-        assertTrue(!deepseekWithoutKey.isKeylessProxy)
-        assertTrue(!deepseekWithoutKey.isReadyToChat)
+        // 无 Build 号时回退语义化版本比较
+        assertTrue(
+            com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.isNewerRelease(
+                latestTag = "v2.2.0",
+                latestVersionCode = 0,
+                currentVersionName = "2.1.0",
+                currentVersionCode = 51
+            )
+        )
 
-        val autoModel = CumtAiCourseService.inferModelInfo("cumt-free-auto")
-        assertTrue(autoModel.supportsVision)
-        assertTrue(autoModel.supportsTools)
+        val candidates = com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker.buildDownloadCandidates(
+            "https://github.com/xiaoxuanaichitao/shiguangschedule/releases/download/v2.1.0-b52/app.apk"
+        )
+        assertEquals(3, candidates.size)
+        assertTrue(candidates[0].second.startsWith("https://gh-proxy.com/https://github.com/"))
+        assertTrue(candidates[2].second.startsWith("https://github.com/"))
     }
 }

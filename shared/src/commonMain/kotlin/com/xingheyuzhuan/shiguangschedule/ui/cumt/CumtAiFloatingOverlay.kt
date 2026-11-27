@@ -146,7 +146,6 @@ fun CumtAiFloatingOverlay(
     val isBusy by sessionRepo.isBusy.collectAsState()
     val hasUnreadReply by sessionRepo.hasUnreadReply.collectAsState()
     val isQuickSheetOpen by sessionRepo.isQuickSheetOpen.collectAsState()
-    val freeQuotaText by sessionRepo.freeQuotaText.collectAsState()
 
     LaunchedEffect(Unit) {
         mcpManager.ensureAutoStartIfEnabled()
@@ -270,15 +269,10 @@ fun CumtAiFloatingOverlay(
                                 fontWeight = FontWeight.ExtraBold
                             )
                             Text(
-                                text = when {
-                                    aiConfig.isKeylessProxy && aiConfig.isReadyToChat && !freeQuotaText.isNullOrBlank() ->
-                                        "${aiConfig.effectiveDisplayName} · $freeQuotaText"
-                                    aiConfig.isReadyToChat ->
-                                        "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
-                                    aiConfig.isKeylessProxy ->
-                                        "免费体验尚未填写中转地址 · 点击右侧进入设置"
-                                    else ->
-                                        "尚未配置 API Key · 点击右侧进入设置"
+                                text = if (aiConfig.hasApiKey) {
+                                    "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                                } else {
+                                    "尚未配置 API Key · 点击右侧进入设置"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -353,7 +347,7 @@ fun CumtAiFloatingOverlay(
                     }
                 }
 
-                if (!aiConfig.isReadyToChat) {
+                if (!aiConfig.hasApiKey) {
                     Surface(
                         onClick = {
                             sessionRepo.setQuickSheetOpen(false)
@@ -371,11 +365,7 @@ fun CumtAiFloatingOverlay(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = if (aiConfig.isKeylessProxy) {
-                                    "请先填入免费中转地址，或切换为自有 API Key 后即可对话"
-                                } else {
-                                    "请先配置 API Key（支持自动识别模型）后即可对话"
-                                },
+                                text = "请先配置 API Key（支持自动识别模型）后即可对话",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = CumtAccent.AMBER.contentColor(),
                                 modifier = Modifier.weight(1f)

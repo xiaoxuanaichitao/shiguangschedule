@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,9 +32,14 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAutoLoginCoordinator
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
 import com.xingheyuzhuan.shiguangschedule.data.model.StartScreen
 import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
+import com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker
+import com.xingheyuzhuan.shiguangschedule.tool.UpdateDownloadState
+import com.xingheyuzhuan.shiguangschedule.tool.UpdatePlatform
+import com.xingheyuzhuan.shiguangschedule.tool.UpdateStatus
 import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdaptiveNavigationScaffold
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CampusDiscoverScreen
@@ -59,6 +65,7 @@ import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
 import com.xingheyuzhuan.shiguangschedule.ui.settings.additional.LanguageSettingScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.additional.MoreOptionsScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.additional.OpenSourceLicensesScreen
+import com.xingheyuzhuan.shiguangschedule.ui.settings.additional.UpdateResultDialog
 import com.xingheyuzhuan.shiguangschedule.ui.settings.backup.BackupScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.contribution.ContributionScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.conversion.CourseTableConversionScreen
@@ -80,17 +87,43 @@ import com.xingheyuzhuan.shiguangschedule.ui.settings.time.TimeScheduleManagemen
 import com.xingheyuzhuan.shiguangschedule.ui.theme.ShiguangScheduleTheme
 import com.xingheyuzhuan.shiguangschedule.ui.theme.SyncImmersiveStatusBarIcons
 import com.xingheyuzhuan.shiguangschedule.ui.today.TodayScheduleScreen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.qualifier.named
 
 @Composable
 fun App() {
     val viewModel: SettingsViewModel = koinViewModel()
     val state by viewModel.uiState.collectAsState()
     val autoLoginCoordinator: CumtAutoLoginCoordinator = koinInject()
+    val updateChecker: UpdateChecker = koinInject()
+    val localRepo: CumtLocalRepository = koinInject()
+    val appVersionName: String = koinInject(named("AppVersionName"))
+    val appVersionCode: Int = koinInject(named("AppVersionCode"))
+    val appScope = rememberCoroutineScope()
+
+    var startupUpdateFound by remember { mutableStateOf<UpdateStatus.Found?>(null) }
+    var startupDownloadState by remember { mutableStateOf<UpdateDownloadState>(UpdateDownloadState.Idle) }
 
     LaunchedEffect(Unit) {
         autoLoginCoordinator.tryAutoLoginOnStartup()
+    }
+
+    // 启动静默检查更新（延迟 2.2s，不阻塞首帧渲染；若用户已忽略该版本则不再弹窗）
+    LaunchedEffect(Unit) {
+        delay(2200L)
+        val result = runCatching {
+            updateChecker.checkUpdate(UpdatePlatform.GITHUB, appVersionName, appVersionCode)
+        }.getOrNull()
+        if (result is UpdateStatus.Found) {
+            val ignoredTag = runCatching { localRepo.getIgnoredUpdateVersion() }.getOrDefault("")
+            if (ignoredTag != result.versionName) {
+                startupUpdateFound = result
+                startupDownloadState = UpdateDownloadState.Idle
+            }
+        }
     }
 
     if (state.isReady) {
@@ -105,6 +138,35 @@ fun App() {
                 startDestination = startDest,
                 appSettings = state.appSettings
             )
+
+            startupUpdateFound?.let { found ->
+                UpdateResultDialog(
+                    showDialog = true,
+                    updateStatus = found,
+                    downloadState = startupDownloadState,
+                    onDismiss = {
+                        startupUpdateFound = null
+                        startupDownloadState = UpdateDownloadState.Idle
+                    },
+                    onDownloadClick = { target ->
+                        appScope.launch {
+                            updateChecker.downloadAndInstall(target) { dlState ->
+                                startupDownloadState = dlState
+                            }
+                        }
+                    },
+                    onBrowserDownloadClick = { pageUrl ->
+                        updateChecker.launchUpdate(pageUrl)
+                    },
+                    onIgnoreVersion = { tag ->
+                        startupUpdateFound = null
+                        startupDownloadState = UpdateDownloadState.Idle
+                        appScope.launch {
+                            localRepo.setIgnoredUpdateVersion(tag)
+                        }
+                    }
+                )
+            }
         }
     } else {
         Surface(modifier = Modifier.fillMaxSize()) {}

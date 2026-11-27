@@ -48,4 +48,12 @@ actual fun SetupPlatformThemeEffects(
     }
 }
 
+@Composable
+actual fun SyncImmersiveStatusBarIcons(
+    forceLightContent: Boolean,
+    darkTheme: Boolean
+) {
+    // iOS 状态栏交由 UIViewController 外观自动管理
+}
+
 actual val supportsDynamicColor: Boolean = false

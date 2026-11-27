@@ -302,7 +302,8 @@ class CumtAiCourseService {
                     pendingActions.add(
                         preview.copy(
                             status = if (exec.success) CumtAiActionStatus.APPLIED else CumtAiActionStatus.FAILED,
-                            resultMessage = exec.summary
+                            resultMessage = exec.summary,
+                            createdCourseIds = exec.createdCourseIds
                         )
                     )
                     messages.add(buildJsonObject {
@@ -477,7 +478,8 @@ class CumtAiCourseService {
                     pendingActions.add(
                         preview.copy(
                             status = if (exec.success) CumtAiActionStatus.APPLIED else CumtAiActionStatus.FAILED,
-                            resultMessage = exec.summary
+                            resultMessage = exec.summary,
+                            createdCourseIds = exec.createdCourseIds
                         )
                     )
                     exec.payloadJson
@@ -548,7 +550,8 @@ class CumtAiCourseService {
             listOf(
                 preview.copy(
                     status = if (exec.success) CumtAiActionStatus.APPLIED else CumtAiActionStatus.FAILED,
-                    resultMessage = exec.summary
+                    resultMessage = exec.summary,
+                    createdCourseIds = exec.createdCourseIds
                 )
             )
         } else {

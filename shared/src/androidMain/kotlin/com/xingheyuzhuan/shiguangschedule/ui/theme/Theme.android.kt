@@ -86,6 +86,23 @@ actual fun SetupPlatformThemeEffects(
     }
 }
 
+@Composable
+actual fun SyncImmersiveStatusBarIcons(
+    forceLightContent: Boolean,
+    darkTheme: Boolean
+) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = view.context.findActivity()?.window ?: return@SideEffect
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            val useDarkIcons = !darkTheme && !forceLightContent
+            insetsController.isAppearanceLightStatusBars = useDarkIcons
+            insetsController.isAppearanceLightNavigationBars = useDarkIcons
+        }
+    }
+}
+
 @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
 actual val supportsDynamicColor: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

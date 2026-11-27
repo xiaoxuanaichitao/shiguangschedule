@@ -50,6 +50,7 @@ import com.xingheyuzhuan.shiguangschedule.cumt.CumtAccountProfile
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAuthResult
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtConstants
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtParsers
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtPlatformBridge
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtServiceRepository
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
@@ -152,6 +153,7 @@ fun CumtAuthScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var showRawStudentId by remember { mutableStateOf(false) }
 
     LaunchedEffect(profile.username) {
         if (username.isEmpty() && profile.username.isNotBlank()) {
@@ -222,15 +224,25 @@ fun CumtAuthScreen(
                             color = Color.White
                         )
                         Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = if (isBound) {
-                                "学号 ${profile.username} · 本机安全加密"
-                            } else {
-                                "绑定后可查询一卡通、图书馆借阅与快速导入课表"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
+                        val displaySid = if (showRawStudentId) {
+                            profile.username
+                        } else {
+                            CumtParsers.maskStudentId(profile.username)
+                        }
+                        Surface(
+                            color = Color.Transparent,
+                            onClick = { if (isBound) showRawStudentId = !showRawStudentId }
+                        ) {
+                            Text(
+                                text = if (isBound) {
+                                    "学号 $displaySid（点击${if (showRawStudentId) "隐藏" else "查看"}） · 本机安全加密"
+                                } else {
+                                    "绑定后可查询一卡通、图书馆借阅与快速导入课表"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
                     }
                     if (isBound) {
                         Surface(

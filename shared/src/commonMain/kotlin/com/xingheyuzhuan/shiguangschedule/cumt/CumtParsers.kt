@@ -21,7 +21,8 @@ data class MappedExamScheduleSlot(
 
 data class ParsedBkScheduleResult(
     val courses: List<ImportCourseJsonModel>,
-    val suggestedTermStartDate: String?
+    val suggestedTermStartDate: String?,
+    val studentName: String? = null
 )
 
 data class CasLoginInputs(
@@ -316,6 +317,8 @@ object CumtParsers {
             ?: return ParsedBkScheduleResult(emptyList(), null)
 
         val xsxx = runCatching { root["xsxx"]?.jsonObject }.getOrNull()
+        val studentNameFromXsxx = listOf("XM", "xm", "jsxm")
+            .firstNotNullOfOrNull { k -> xsxx?.get(k)?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() } }
         val xnmYearFromXsxx = xsxx?.get("XNMC")?.jsonPrimitive?.contentOrNull
             ?.let { Regex("""(\d{4})""").find(it)?.groupValues?.get(1)?.toIntOrNull() }
             ?: xsxx?.get("XNM")?.jsonPrimitive?.contentOrNull?.toIntOrNull()
@@ -329,7 +332,7 @@ object CumtParsers {
         } else null
 
         val kbList = runCatching { root["kbList"]?.jsonArray }.getOrNull()
-            ?: return ParsedBkScheduleResult(emptyList(), suggestedDate)
+            ?: return ParsedBkScheduleResult(emptyList(), suggestedDate, studentNameFromXsxx)
 
         val courses = mutableListOf<ImportCourseJsonModel>()
         val dedup = HashSet<String>()
@@ -380,11 +383,17 @@ object CumtParsers {
                 }
             }
         }
-        return ParsedBkScheduleResult(courses = courses, suggestedTermStartDate = suggestedDate)
+        return ParsedBkScheduleResult(
+            courses = courses,
+            suggestedTermStartDate = suggestedDate,
+            studentName = studentNameFromXsxx
+        )
     }
 
     fun parseBkCourseHtml(html: String): ParsedBkScheduleResult {
         val suggestedDate = parseSuggestedTermStartDate(html)
+        val detectedStudentName = Regex(""">([\u4e00-\u9fa5·]{2,12})的课表<""")
+            .find(html)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
         val gridTableOpenRegex = Regex("""<table\b([^>]*\bid\s*=\s*["']kbgrid_table_\d+["'][^>]*)>""", RegexOption.IGNORE_CASE)
         val gridTables = extractMatchingElementsByOpenPattern(html, "table", gridTableOpenRegex)
         val searchScopes = if (gridTables.isNotEmpty()) {
@@ -429,7 +438,17 @@ object CumtParsers {
             }
         }
 
-        return ParsedBkScheduleResult(courses = courses, suggestedTermStartDate = suggestedDate)
+        return ParsedBkScheduleResult(
+            courses = courses,
+            suggestedTermStartDate = suggestedDate,
+            studentName = detectedStudentName
+        )
+    }
+
+    fun maskStudentId(rawId: String): String {
+        val trimmed = rawId.trim()
+        if (trimmed.length <= 4) return "****"
+        return "${trimmed.take(2)}****${trimmed.takeLast(2)}"
     }
 
     private fun parseBkListTableHtml(html: String): List<ImportCourseJsonModel> {

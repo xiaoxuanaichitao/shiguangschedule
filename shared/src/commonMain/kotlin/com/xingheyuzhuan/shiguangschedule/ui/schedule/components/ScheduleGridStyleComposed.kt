@@ -25,6 +25,7 @@ data class ScheduleGridStyleComposed(
     val courseBlockOuterPadding: Dp,
     val courseBlockInnerPadding: Dp,
     val courseBlockAlpha: Float,
+    val hasCustomAlpha: Boolean = false,
 
     // 字体缩放比例
     val fontScale: Float,
@@ -49,12 +50,25 @@ data class ScheduleGridStyleComposed(
 
     val pageTextColor: Color?, // 页面字符颜色
     val courseTextColor: Color?, // 课程块文字颜色
+
+    // 自定义壁纸联动视觉属性
+    val hasWallpaper: Boolean = false,
+    val glassEnabled: Boolean = true,
+    val cardFrost: Float = 0.28f,
 ) {
+    /** 壁纸模式下若用户从未手动改过卡片不透明度，自动采用 0.76f 通透毛玻璃比例；一旦用户手动拖动滑块则严格遵循用户设定 */
+    val effectiveCourseAlpha: Float
+        get() = if (hasWallpaper && !hasCustomAlpha) 0.76f else courseBlockAlpha
+
     companion object {
         /**
          * 扩展函数：将数据模型 (Float/Long) 转换为 UI 强类型模型 (Dp/Color)。
          */
-        fun ScheduleGridStyle.toComposedStyle(): ScheduleGridStyleComposed {
+        fun ScheduleGridStyle.toComposedStyle(
+            hasWallpaper: Boolean = false,
+            glassEnabled: Boolean = true,
+            cardFrost: Float = 0.28f
+        ): ScheduleGridStyleComposed {
             return ScheduleGridStyleComposed(
                 timeColumnWidth = this.timeColumnWidthDp.dp,
                 dayHeaderHeight = this.dayHeaderHeightDp.dp,
@@ -63,6 +77,7 @@ data class ScheduleGridStyleComposed(
                 courseBlockOuterPadding = this.courseBlockOuterPaddingDp.dp,
                 courseBlockInnerPadding = this.courseBlockInnerPaddingDp.dp,
                 courseBlockAlpha = this.courseBlockAlphaFloat,
+                hasCustomAlpha = this.hasCustomAlpha,
                 fontScale = this.courseBlockFontScale,
                 courseColorMaps = this.courseColorMaps.map { dual ->
                     DualColor(
@@ -83,6 +98,9 @@ data class ScheduleGridStyleComposed(
                 scheduleMode = this.scheduleMode,
                 pageTextColor = this.pageTextColorLong?.let { Color(it) },
                 courseTextColor = this.courseTextColorLong?.let { Color(it) },
+                hasWallpaper = hasWallpaper,
+                glassEnabled = glassEnabled,
+                cardFrost = cardFrost,
             )
         }
     }

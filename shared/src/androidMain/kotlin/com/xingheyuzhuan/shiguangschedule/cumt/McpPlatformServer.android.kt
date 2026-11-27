@@ -109,7 +109,7 @@ actual class McpPlatformServer actual constructor() {
             if (parts.size < 2) return
             val method = parts[0].uppercase()
             val rawTarget = parts[1]
-            val path = rawTarget.substringBefore('?')
+            val path = rawTarget.substringBefore('?').trimEnd('/').ifEmpty { "/" }
             val queryParams = parseQueryParams(rawTarget.substringAfter('?', ""))
 
             val headers = mutableMapOf<String, String>()
@@ -152,8 +152,7 @@ actual class McpPlatformServer actual constructor() {
 
             when {
                 method == "POST" && path == "/mcp" -> {
-                    val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, 4 * 1024 * 1024) ?: 0
-                    val bodyBytes = readExactBytes(input, contentLength)
+                    val bodyBytes = readRequestBody(input, headers)
                     val responseJson = onJsonRpc(bodyBytes.toString(Charsets.UTF_8))
                     if (responseJson == null) {
                         writeHttpResponse(output, 202, "Accepted", "application/json; charset=utf-8", ByteArray(0))
@@ -175,8 +174,7 @@ actual class McpPlatformServer actual constructor() {
 
                 method == "POST" && path == "/messages" -> {
                     val sessionId = queryParams["sessionId"].orEmpty()
-                    val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, 4 * 1024 * 1024) ?: 0
-                    val bodyBytes = readExactBytes(input, contentLength)
+                    val bodyBytes = readRequestBody(input, headers)
                     val responseJson = onJsonRpc(bodyBytes.toString(Charsets.UTF_8))
                     val channel = sseSessions[sessionId]
                     if (channel != null && responseJson != null) {
@@ -293,6 +291,27 @@ actual class McpPlatformServer actual constructor() {
             if (b != '\r'.code) out.write(b)
         }
         return out.toString("UTF-8")
+    }
+
+    private fun readRequestBody(input: BufferedInputStream, headers: Map<String, String>): ByteArray {
+        if (headers["transfer-encoding"]?.contains("chunked", ignoreCase = true) == true) {
+            val out = ByteArrayOutputStream()
+            val maxBytes = 4 * 1024 * 1024
+            while (out.size() < maxBytes) {
+                val sizeLine = readAsciiLine(input)?.substringBefore(';')?.trim() ?: break
+                val chunkSize = sizeLine.toIntOrNull(16) ?: break
+                if (chunkSize <= 0) {
+                    readAsciiLine(input)
+                    break
+                }
+                val chunk = readExactBytes(input, chunkSize.coerceAtMost(maxBytes - out.size()))
+                out.write(chunk)
+                readAsciiLine(input)
+            }
+            return out.toByteArray()
+        }
+        val contentLength = headers["content-length"]?.toIntOrNull()?.coerceIn(0, 4 * 1024 * 1024) ?: 0
+        return readExactBytes(input, contentLength)
     }
 
     private fun readExactBytes(input: BufferedInputStream, length: Int): ByteArray {

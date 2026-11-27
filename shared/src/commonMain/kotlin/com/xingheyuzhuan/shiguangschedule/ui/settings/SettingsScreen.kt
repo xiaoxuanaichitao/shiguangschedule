@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.data.model.AppThemeMode
 import com.xingheyuzhuan.shiguangschedule.ui.components.NativeNumberPicker
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSectionHeader
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSegmentedBar
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSurfaceCard
 import kotlinx.datetime.DayOfWeek
@@ -199,13 +200,6 @@ fun SettingsScreen(
                     )
                 }
                 item {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp),
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-                }
-                item {
                     AdvancedSettingsSection(onNavigate = onNavigate)
                 }
             }
@@ -297,10 +291,8 @@ private fun AppearanceQuickSection(
             modifier = Modifier.padding(SETTING_PADDING),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "外观与主题模式",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+            CumtSectionHeader(
+                title = "外观与界面字号"
             )
 
             CumtSegmentedBar(
@@ -311,8 +303,8 @@ private fun AppearanceQuickSection(
             )
 
             SettingItem(
-                title = "主题配色与动态取色",
-                subtitle = "切换浅色/深色模式、动态取色或自定义主题色",
+                title = "主题配色与软件字号",
+                subtitle = "调节软件全局字号（不影响课表）、动态取色或自定义主题色",
                 onClick = onThemeSettingsClick
             )
         }
@@ -338,18 +330,13 @@ private fun GeneralSettingsSection(
     onFirstDayOfWeekClick: () -> Unit,
     onQuickActionsClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(SETTING_PADDING),
-            verticalArrangement = Arrangement.spacedBy(ITEM_SPACING)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                stringResource(Res.string.section_title_general_settings),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+            CumtSectionHeader(
+                title = stringResource(Res.string.section_title_general_settings)
             )
 
             SettingItem(
@@ -443,23 +430,23 @@ private fun GeneralSettingsSection(
  */
 @Composable
 private fun AdvancedSettingsSection(onNavigate: (Destination) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(SETTING_PADDING),
-            verticalArrangement = Arrangement.spacedBy(ITEM_SPACING)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                stringResource(Res.string.section_title_advanced_features),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+            CumtSectionHeader(
+                title = stringResource(Res.string.section_title_advanced_features)
             )
             SettingItem(
                 title = "矿大统一身份认证",
                 subtitle = "绑定学号以直连校园卡、图书馆与教务自动填充",
                 onClick = { onNavigate(Destination.CumtAuth) }
+            )
+            SettingItem(
+                title = "矿大 AI 助手与悬浮窗",
+                subtitle = "配置模型 Key、调节全局悬浮球图标大小与 MCP 服务",
+                onClick = { onNavigate(Destination.CumtAiCourseImport) }
             )
             SettingItem(
                 title = stringResource(Res.string.item_course_conversion),
@@ -515,19 +502,36 @@ private fun SettingItem(
     subtitle: String,
     icon: ImageVector = vectorResource(Res.drawable.chevron_right_24px),
     onClick: (() -> Unit)? = null,
-    trailingContent: @Composable () -> Unit = { Icon(icon, contentDescription = null) }
+    trailingContent: @Composable () -> Unit = {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .padding(vertical = 8.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium)
+        Column(
+            modifier = Modifier.weight(1f).padding(end = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         trailingContent()
     }

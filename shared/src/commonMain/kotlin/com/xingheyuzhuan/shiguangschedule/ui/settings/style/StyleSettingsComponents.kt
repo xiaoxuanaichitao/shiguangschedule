@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,6 +39,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -53,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -61,18 +65,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.xingheyuzhuan.shiguangschedule.Destination
+import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.BorderTypeProto
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleModeProto
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdvancedColorPicker
 import com.xingheyuzhuan.shiguangschedule.ui.components.ColorPickerConfig
 import com.xingheyuzhuan.shiguangschedule.ui.components.SliderWithInputField
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSectionHeader
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSegmentedBar
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSurfaceCard
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGrid
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridActions
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridStyleComposed
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridViewState
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleWallpaperBackdrop
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.rememberScheduleGridState
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.MergedCourseBlock
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.WeeklyScheduleUiState
+import kotlin.math.roundToInt
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
@@ -90,6 +101,7 @@ import shiguangschedule.shared.generated.resources.action_reset_style
 import shiguangschedule.shared.generated.resources.border_type_dashed
 import shiguangschedule.shared.generated.resources.border_type_solid
 import shiguangschedule.shared.generated.resources.check_24px
+import shiguangschedule.shared.generated.resources.chevron_right_24px
 import shiguangschedule.shared.generated.resources.desc_wallpaper_set
 import shiguangschedule.shared.generated.resources.desc_wallpaper_unset
 import shiguangschedule.shared.generated.resources.dialog_reset_message
@@ -136,6 +148,8 @@ import kotlin.time.Clock
 @Composable
 fun SettingsListContent(
     currentStyle: ScheduleGridStyleComposed,
+    appSettings: AppSettingsModel,
+    recentWallpapers: List<String>,
     viewModel: StyleSettingsViewModel,
     isPreviewDark: Boolean,
     wallpaperPath: String? = null,
@@ -173,51 +187,66 @@ fun SettingsListContent(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        OutlinedButton(
-            onClick = { showResetDialog = true },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
-        ) {
-            Text(stringResource(Res.string.action_reset_style))
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-        // 其他样式分类
-        Text(
-            text = stringResource(Res.string.style_category_other),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary
+        // 1. 置顶：背景图片与毛玻璃质感工作台（周课表 + 当日课表双端实时同步）
+        WallpaperGlassStudioSection(
+            currentStyle = currentStyle,
+            appSettings = appSettings,
+            recentWallpapers = recentWallpapers,
+            isPreviewDark = isPreviewDark,
+            activeWallpaperPath = wallpaperPath,
+            onPickFromAlbum = onWallpaperClick,
+            onResetWallpaper = { viewModel.removeWallpaper(isPreviewDark) },
+            onSelectPreviewDark = viewModel::setPreviewDark,
+            onFollowDarkModeChange = viewModel::updateWallpaperFollowDarkMode,
+            onBlurChange = viewModel::updateWallpaperBlur,
+            onCardAlphaChange = viewModel::updateAlpha,
+            onCardFrostChange = viewModel::updateWallpaperCardFrost,
+            onDimChange = viewModel::updateWallpaperDim,
+            onGlassEnabledChange = viewModel::updateWallpaperGlassEnabled,
+            onApplyRecent = { path -> viewModel.applyRecentWallpaper(path, isPreviewDark) }
         )
 
-        // 小组件样式设置跳转入口
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onNavigate(Destination.WidgetStyleSettings) }
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        // 2. 桌面小组件样式快捷入口
+        CumtSurfaceCard(
+            onClick = { onNavigate(Destination.WidgetStyleSettings) },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = stringResource(Res.string.title_widget_style),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(Res.string.title_widget_style),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "独立设置桌面小组件字号、背景透明度与深浅模式",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = vectorResource(Res.drawable.chevron_right_24px),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
 
-        Text(stringResource(Res.string.style_category_interface), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        WallpaperItem(
-            wallpaperPath = wallpaperPath,
-            onClick = onWallpaperClick,
-            onLongClick = { viewModel.removeWallpaper(isPreviewDark) }
-        )
+        Text(stringResource(Res.string.style_category_interface), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         StyleSwitchItem(
             label = stringResource(Res.string.label_schedule_mode_24h),
             checked = currentStyle.scheduleMode == ScheduleModeProto.TIME_24H_MODE
@@ -288,6 +317,357 @@ fun SettingsListContent(
             colors = currentStyle.courseColorMaps.map { it.dark },
             onEditColor = { onPick(true, it) }
         )
+
+        OutlinedButton(
+            onClick = { showResetDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+        ) {
+            Text(stringResource(Res.string.action_reset_style))
+        }
+    }
+}
+
+@Composable
+private fun WallpaperGlassStudioSection(
+    currentStyle: ScheduleGridStyleComposed,
+    appSettings: AppSettingsModel,
+    recentWallpapers: List<String>,
+    isPreviewDark: Boolean,
+    activeWallpaperPath: String?,
+    onPickFromAlbum: () -> Unit,
+    onResetWallpaper: () -> Unit,
+    onSelectPreviewDark: (Boolean) -> Unit,
+    onFollowDarkModeChange: (Boolean) -> Unit,
+    onBlurChange: (Float) -> Unit,
+    onCardAlphaChange: (Float) -> Unit,
+    onCardFrostChange: (Float) -> Unit,
+    onDimChange: (Float) -> Unit,
+    onGlassEnabledChange: (Boolean) -> Unit,
+    onApplyRecent: (String) -> Unit
+) {
+    // 1. 毛玻璃与通透度实时滑块卡
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CumtSectionHeader(
+                title = "毛玻璃与卡片通透度",
+                subtitle = "周课表与今日课表实时同步生效"
+            )
+
+            LabeledCompactSlider(
+                label = "背景模糊",
+                valueText = "${appSettings.wallpaperBlurDp.roundToInt()} dp",
+                value = appSettings.wallpaperBlurDp.coerceIn(0f, 28f),
+                valueRange = 0f..28f,
+                onValueChange = onBlurChange
+            )
+
+            LabeledCompactSlider(
+                label = "卡片不透明度",
+                valueText = "${(currentStyle.effectiveCourseAlpha * 100f).roundToInt()}%",
+                value = currentStyle.effectiveCourseAlpha.coerceIn(0.15f, 1.0f),
+                valueRange = 0.15f..1.0f,
+                onValueChange = onCardAlphaChange
+            )
+
+            LabeledCompactSlider(
+                label = "卡片背景柔雾（防花字）",
+                valueText = "${(appSettings.wallpaperCardFrost * 100f).roundToInt()}%",
+                value = appSettings.wallpaperCardFrost.coerceIn(0f, 0.85f),
+                valueRange = 0f..0.85f,
+                onValueChange = onCardFrostChange
+            )
+
+            LabeledCompactSlider(
+                label = "背景护眼暗化",
+                valueText = "${(appSettings.wallpaperDimAlpha * 100f).roundToInt()}%",
+                value = appSettings.wallpaperDimAlpha.coerceIn(0f, 0.50f),
+                valueRange = 0f..0.50f,
+                onValueChange = onDimChange
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "液态玻璃高光质感",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "开启卡片镜面高光内描边与斜向微折射柔光",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = appSettings.wallpaperGlassEnabled,
+                    onCheckedChange = onGlassEnabledChange
+                )
+            }
+        }
+    }
+
+    // 2. 背景图片选择、固定/跟随明暗与最近三张历史
+    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CumtSectionHeader(
+                title = "背景图片",
+                subtitle = "支持固定单图或浅色/深色独立背景，自动保留最近三张"
+            )
+
+            Surface(
+                onClick = onPickFromAlbum,
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = vectorResource(Res.drawable.image_24px),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "从相册选择",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "按屏幕比例智能裁剪，并保留最近三张",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = vectorResource(Res.drawable.chevron_right_24px),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (!activeWallpaperPath.isNullOrBlank()) {
+                Surface(
+                    onClick = onResetWallpaper,
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.42f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = vectorResource(Res.drawable.refresh_24px),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "恢复当前默认背景",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = vectorResource(Res.drawable.chevron_right_24px),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = "显示方式",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CumtSegmentedBar(
+                options = listOf("固定背景", "跟随明暗"),
+                selectedIndex = if (appSettings.wallpaperFollowDarkMode) 1 else 0,
+                onSelect = { idx -> onFollowDarkModeChange(idx == 1) }
+            )
+
+            if (appSettings.wallpaperFollowDarkMode) {
+                Text(
+                    text = "正在设置",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                CumtSegmentedBar(
+                    options = listOf("浅色背景", "深色背景"),
+                    selectedIndex = if (isPreviewDark) 1 else 0,
+                    onSelect = { idx -> onSelectPreviewDark(idx == 1) }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    WallpaperPhonePreviewTile(
+                        path = appSettings.backgroundImagePath.light.ifBlank { null },
+                        label = "浅色",
+                        isSelected = !isPreviewDark,
+                        isDarkPlaceholder = false,
+                        onClick = { onSelectPreviewDark(false) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    WallpaperPhonePreviewTile(
+                        path = appSettings.backgroundImagePath.dark.ifBlank { null },
+                        label = "深色",
+                        isSelected = isPreviewDark,
+                        isDarkPlaceholder = true,
+                        onClick = { onSelectPreviewDark(true) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            if (recentWallpapers.isNotEmpty()) {
+                Text(
+                    text = "最近从相册选择",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    recentWallpapers.take(3).forEachIndexed { idx, path ->
+                        val isCurrent = path == activeWallpaperPath
+                        WallpaperPhonePreviewTile(
+                            path = path,
+                            label = "最近 ${idx + 1}",
+                            isSelected = isCurrent,
+                            isDarkPlaceholder = false,
+                            onClick = { onApplyRecent(path) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    repeat((3 - recentWallpapers.size).coerceAtLeast(0)) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabeledCompactSlider(
+    label: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange
+        )
+    }
+}
+
+@Composable
+private fun WallpaperPhonePreviewTile(
+    path: String?,
+    label: String,
+    isSelected: Boolean,
+    isDarkPlaceholder: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(14.dp)
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+
+    Box(
+        modifier = modifier
+            .aspectRatio(0.54f)
+            .clip(shape)
+            .border(borderWidth, borderColor, shape)
+            .clickable(onClick = onClick)
+    ) {
+        if (!path.isNullOrBlank()) {
+            AsyncImage(
+                model = path,
+                contentDescription = label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            if (isDarkPlaceholder) {
+                                listOf(Color(0xFF0F172A), Color(0xFF1E293B))
+                            } else {
+                                listOf(Color(0xFFE6F7F2), Color(0xFFF8FAFC))
+                            }
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "默认$label",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isDarkPlaceholder) Color.White.copy(alpha = 0.7f) else Color(0xFF475569)
+                )
+            }
+        }
+
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = vectorResource(Res.drawable.check_24px),
+                    contentDescription = "当前使用",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+        }
     }
 }
 
@@ -369,7 +749,7 @@ fun ColorPreviewBox(color: Color, isLightModeUI: Boolean) {
 fun ScheduleGridContent(
     style: ScheduleGridStyleComposed,
     demoUiState: WeeklyScheduleUiState,
-    wallpaperPath: String? = null
+    wallpaperVisuals: WallpaperVisualConfig = WallpaperVisualConfig()
 ) {
     val today = remember { Clock.System.todayIn(TimeZone.currentSystemDefault()) }
     val localDates = remember(demoUiState.firstDayOfWeek) {
@@ -414,7 +794,7 @@ fun ScheduleGridContent(
         }
     }
 
-    val hasWallpaper = !wallpaperPath.isNullOrEmpty()
+    val hasWallpaper = wallpaperVisuals.hasWallpaper
 
     val backgroundModifier = if (hasWallpaper) {
         Modifier.fillMaxSize()
@@ -424,12 +804,9 @@ fun ScheduleGridContent(
 
     Box(modifier = backgroundModifier) {
         if (hasWallpaper) {
-            AsyncImage(
-                model = wallpaperPath,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter
+            ScheduleWallpaperBackdrop(
+                visuals = wallpaperVisuals,
+                showBottomScrim = false
             )
         }
 

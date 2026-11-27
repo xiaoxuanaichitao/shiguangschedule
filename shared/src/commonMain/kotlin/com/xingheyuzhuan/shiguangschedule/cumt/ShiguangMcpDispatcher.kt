@@ -50,12 +50,34 @@ class ShiguangMcpDispatcher(
         rawBody: String,
         allowWrite: Boolean
     ): String? {
-        val reqObj = runCatching {
-            json.parseToJsonElement(rawBody.trim()).jsonObject
+        val parsedElement = runCatching {
+            json.parseToJsonElement(rawBody.trim())
         }.getOrElse {
             return buildErrorResponse(JsonNull, -32700, "Parse error: invalid JSON").toString()
         }
 
+        // 支持 MCP 2025-03-26 Streamable HTTP 的 JSON-RPC 批量请求数组 [...]
+        if (parsedElement is kotlinx.serialization.json.JsonArray) {
+            if (parsedElement.isEmpty()) {
+                return buildErrorResponse(JsonNull, -32600, "Invalid Request: empty batch").toString()
+            }
+            val responses = parsedElement.mapNotNull { item ->
+                val obj = item as? JsonObject
+                    ?: return@mapNotNull buildErrorResponse(JsonNull, -32600, "Invalid batch item").toString()
+                handleSingleRequestObject(obj, allowWrite)
+            }
+            return if (responses.isEmpty()) null else "[${responses.joinToString(",")}]"
+        }
+
+        val reqObj = parsedElement as? JsonObject
+            ?: return buildErrorResponse(JsonNull, -32600, "Invalid Request: expected JSON object").toString()
+        return handleSingleRequestObject(reqObj, allowWrite)
+    }
+
+    private suspend fun handleSingleRequestObject(
+        reqObj: JsonObject,
+        allowWrite: Boolean
+    ): String? {
         val id: JsonElement? = reqObj["id"]
         val method = reqObj["method"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val params = (reqObj["params"] as? JsonObject) ?: JsonObject(emptyMap())

@@ -5,6 +5,7 @@ import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseWithWeeks
 import com.xingheyuzhuan.shiguangschedule.data.db.main.TimeSlot
 import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
 import com.xingheyuzhuan.shiguangschedule.data.model.ScheduleGridStyle
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.util.getTodayLocalDate
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.util.startOfWeek
 import kotlinx.datetime.DayOfWeek
@@ -43,7 +44,8 @@ data class WeeklyScheduleUiState(
     val daysUntilStart: Long = 0,
     val floatingCourse: CourseWithWeeks? = null,
     val floatingSourceWeek: Int? = null,
-    val wallpaperPath: String? = null
+    val wallpaperPath: String? = null,
+    val wallpaperVisuals: WallpaperVisualConfig = WallpaperVisualConfig()
 )
 
 /**

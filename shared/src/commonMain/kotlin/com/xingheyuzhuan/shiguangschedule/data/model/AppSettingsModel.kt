@@ -156,6 +156,24 @@ data class AppSettingsModel(
         dark = ""
     ),
 
+    /** 壁纸是否跟随深浅色模式切换（false = 固定背景深浅共用，true = 浅色/深色独立背景） */
+    val wallpaperFollowDarkMode: Boolean = false,
+
+    /** 背景壁纸高斯模糊半径（0f~28f dp） */
+    val wallpaperBlurDp: Float = 0f,
+
+    /** 背景壁纸护眼压暗遮罩浓度（0f~0.55f） */
+    val wallpaperDimAlpha: Float = 0.06f,
+
+    /** 是否开启课程卡片液态毛玻璃高光质感（镜面折射边框与斜向柔光） */
+    val wallpaperGlassEnabled: Boolean = true,
+
+    /** 课程卡片背景柔雾防花底浓度（0f~0.85f，解决花哨壁纸下卡片文字发花问题） */
+    val wallpaperCardFrost: Float = 0.28f,
+
+    /** 最近从相册选择的壁纸历史（最多保留最近 3 张） */
+    val recentWallpapers: List<String> = emptyList(),
+
     /** 开发者功能总开关（默认关闭） */
     val developerModeEnabled: Boolean = false,
 
@@ -198,6 +216,18 @@ data class AppSettingsModel(
         val KEY_BACKGROUND_IMAGE_PATH_LIGHT = stringPreferencesKey("background_image_path_light")
         /** 深色模式背景壁纸路径的存储键 */
         val KEY_BACKGROUND_IMAGE_PATH_DARK = stringPreferencesKey("background_image_path_dark")
+        /** 壁纸是否跟随深浅色模式独立切换的存储键 */
+        val KEY_WALLPAPER_FOLLOW_DARK_MODE = booleanPreferencesKey("wallpaper_follow_dark_mode")
+        /** 壁纸模糊半径存储键 */
+        val KEY_WALLPAPER_BLUR_DP = floatPreferencesKey("wallpaper_blur_dp")
+        /** 壁纸压暗遮罩浓度存储键 */
+        val KEY_WALLPAPER_DIM_ALPHA = floatPreferencesKey("wallpaper_dim_alpha")
+        /** 卡片液态玻璃质感开关存储键 */
+        val KEY_WALLPAPER_GLASS_ENABLED = booleanPreferencesKey("wallpaper_glass_enabled")
+        /** 卡片柔雾防花底浓度存储键 */
+        val KEY_WALLPAPER_CARD_FROST = floatPreferencesKey("wallpaper_card_frost")
+        /** 最近三张壁纸 JSON 列表存储键 */
+        val KEY_RECENT_WALLPAPERS_JSON = stringPreferencesKey("recent_wallpapers_json")
         /** 开发者模式总开关的存储键 */
         val KEY_DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
         /** 软件全局界面字号倍率的存储键 */
@@ -230,6 +260,13 @@ data class AppSettingsModel(
                 emptyList()
             }
 
+            val rawRecentJson = prefs[KEY_RECENT_WALLPAPERS_JSON]
+            val parsedRecents = if (!rawRecentJson.isNullOrEmpty()) {
+                runCatching { json.decodeFromString<List<String>>(rawRecentJson) }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+
             return AppSettingsModel(
                 currentCourseTableId = prefs[KEY_CURRENT_COURSE_TABLE_ID] ?: fallbackTableId.ifEmpty { d.currentCourseTableId },
                 reminderEnabled = prefs[KEY_REMINDER_ENABLED] ?: d.reminderEnabled,
@@ -250,6 +287,12 @@ data class AppSettingsModel(
                     light = prefs[KEY_BACKGROUND_IMAGE_PATH_LIGHT] ?: d.backgroundImagePath.light,
                     dark = prefs[KEY_BACKGROUND_IMAGE_PATH_DARK] ?: d.backgroundImagePath.dark
                 ),
+                wallpaperFollowDarkMode = prefs[KEY_WALLPAPER_FOLLOW_DARK_MODE] ?: d.wallpaperFollowDarkMode,
+                wallpaperBlurDp = (prefs[KEY_WALLPAPER_BLUR_DP] ?: d.wallpaperBlurDp).coerceIn(0f, 28f),
+                wallpaperDimAlpha = (prefs[KEY_WALLPAPER_DIM_ALPHA] ?: d.wallpaperDimAlpha).coerceIn(0f, 0.55f),
+                wallpaperGlassEnabled = prefs[KEY_WALLPAPER_GLASS_ENABLED] ?: d.wallpaperGlassEnabled,
+                wallpaperCardFrost = (prefs[KEY_WALLPAPER_CARD_FROST] ?: d.wallpaperCardFrost).coerceIn(0f, 0.85f),
+                recentWallpapers = parsedRecents.filter { it.isNotBlank() }.distinct().take(3),
                 developerModeEnabled = prefs[KEY_DEVELOPER_MODE_ENABLED] ?: d.developerModeEnabled,
                 appUiFontScale = (prefs[KEY_APP_UI_FONT_SCALE] ?: d.appUiFontScale).coerceIn(0.85f, 1.25f),
             )

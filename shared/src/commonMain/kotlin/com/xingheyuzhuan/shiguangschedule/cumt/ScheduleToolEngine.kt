@@ -46,7 +46,8 @@ data class ScheduleToolDescriptor(
 data class ScheduleToolExecutionResult(
     val success: Boolean,
     val summary: String,
-    val payloadJson: JsonObject
+    val payloadJson: JsonObject,
+    val createdCourseIds: List<String> = emptyList()
 )
 
 data class ScheduleResourceDescriptor(
@@ -136,11 +137,16 @@ class ScheduleToolEngine(
         }
     }
 
-    fun buildPendingActionPreview(
+    suspend fun buildPendingActionPreview(
         toolName: String,
         arguments: JsonObject
     ): CumtAiPendingAction {
         val actionId = "act_${Uuid.random().toString().take(8)}"
+        val existingInTable = runCatching {
+            val tid = resolveTargetTableId(arguments)
+            courseTableRepository.getCoursesWithWeeksByTableId(tid).first()
+        }.getOrDefault(emptyList())
+
         return when (toolName) {
             "add_courses" -> {
                 val courses = parseCoursesArrayArg(arguments)
@@ -154,12 +160,23 @@ class ScheduleToolEngine(
                     val teacher = if (c.teacher.isNotBlank()) " · ${c.teacher}" else ""
                     "$title（$weekStr $dayStr $secStr · $loc$teacher）"
                 }
+                val conflicts = detectScheduleConflicts(
+                    candidates = courses.map { Triple(it.name, it.day, it.startSection..it.endSection) to it.weeks.toSet() },
+                    existing = existingInTable
+                )
                 CumtAiPendingAction(
                     id = actionId,
                     toolName = toolName,
                     title = "追加导入 ${courses.size} 门课程",
-                    summary = if (courses.isEmpty()) "待解析课程参数为空" else "将追加写入课表，不会覆盖已有课程",
+                    summary = if (courses.isEmpty()) {
+                        "待解析课程参数为空"
+                    } else if (conflicts.isNotEmpty()) {
+                        "将追加写入课表（检测到 ${conflicts.size} 处时间重叠，可确认并排显示或取消微调）"
+                    } else {
+                        "经检测无时间冲突，将安全追加写入课表"
+                    },
                     detailLines = detailLines,
+                    conflictWarnings = conflicts,
                     argumentsJson = arguments.toString()
                 )
             }
@@ -314,6 +331,39 @@ class ScheduleToolEngine(
             json.parseToJsonElement(action.argumentsJson).jsonObject
         }.getOrDefault(JsonObject(emptyMap()))
         return executeTool(action.toolName, args, allowWrite = true)
+    }
+
+    suspend fun undoCreatedCourses(courseIds: List<String>): Boolean {
+        if (courseIds.isEmpty()) return false
+        return runCatching {
+            courseTableRepository.deleteCoursesByIds(courseIds)
+            widgetDataSynchronizer.syncNow()
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun detectScheduleConflicts(
+        candidates: List<Pair<Triple<String, Int, IntRange>, Set<Int>>>,
+        existing: List<com.xingheyuzhuan.shiguangschedule.data.db.main.CourseWithWeeks>
+    ): List<String> {
+        val warnings = mutableListOf<String>()
+        for ((meta, weeksSet) in candidates) {
+            val (candName, candDay, candRange) = meta
+            for (ex in existing) {
+                if (ex.course.day != candDay) continue
+                val exStart = ex.course.startSection ?: continue
+                val exEnd = ex.course.endSection ?: continue
+                val sectionOverlap = maxOf(candRange.first, exStart) <= minOf(candRange.last, exEnd)
+                if (!sectionOverlap) continue
+                val overlapWeeks = ex.weeks.map { it.weekNumber }.filter { it in weeksSet }.distinct().sorted()
+                if (overlapWeeks.isNotEmpty()) {
+                    warnings.add(
+                        "第${CumtParsers.formatWeeksCompact(overlapWeeks)}周 ${CumtParsers.formatDayOfWeekLabel(candDay)} 第${candRange.first}-${candRange.last}节：「$candName」与现有「${ex.course.name}」重叠"
+                    )
+                }
+            }
+        }
+        return warnings.distinct().take(6)
     }
 
     // ==================== 只读工具实现 ====================
@@ -665,7 +715,8 @@ class ScheduleToolEngine(
                 put("addedCount", insertedIds.size)
                 putJsonArray("courseIds") { insertedIds.forEach { add(it) } }
                 put("message", summary)
-            }
+            },
+            createdCourseIds = insertedIds
         )
     }
 

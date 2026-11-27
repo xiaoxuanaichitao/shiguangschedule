@@ -61,8 +61,8 @@ class McpPlatformServerJvmTest {
             val authBody = authConn.inputStream.bufferedReader().readText()
             assertTrue(authBody.contains("\"echo\":true"))
 
-            // 4. JSON-RPC notification 返回 202 Accepted
-            val notifyConn = (URL("http://127.0.0.1:$port/mcp").openConnection() as HttpURLConnection).apply {
+            // 4. JSON-RPC notification 返回 202 Accepted（同时测试末尾斜杠 /mcp/ 兼容）
+            val notifyConn = (URL("http://127.0.0.1:$port/mcp/").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
@@ -70,6 +70,18 @@ class McpPlatformServerJvmTest {
                 outputStream.use { it.write("""{"jsonrpc":"2.0","method":"notifications/initialized"}""".toByteArray()) }
             }
             assertEquals(202, notifyConn.responseCode)
+
+            // 5. Transfer-Encoding: chunked 分块传输请求也能完整读取请求体
+            val chunkedConn = (URL("http://127.0.0.1:$port/mcp").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                setChunkedStreamingMode(12)
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Authorization", "Bearer $token")
+                outputStream.use { it.write("""{"jsonrpc":"2.0","id":2,"method":"ping"}""".toByteArray()) }
+            }
+            assertEquals(200, chunkedConn.responseCode)
+            assertTrue(chunkedConn.inputStream.bufferedReader().readText().contains("\"echo\":true"))
         } finally {
             server.stop()
         }

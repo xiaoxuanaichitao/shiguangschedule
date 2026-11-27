@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,8 +52,8 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,6 +76,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -92,6 +94,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiActionStatus
@@ -114,11 +117,12 @@ import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.ai_empty_welcome
 import shiguangschedule.shared.generated.resources.ai_orb_bubbles
 import shiguangschedule.shared.generated.resources.ai_orb_mascot
-import shiguangschedule.shared.generated.resources.arrow_forward_24px
+import shiguangschedule.shared.generated.resources.arrow_upward_24px
 import shiguangschedule.shared.generated.resources.check_circle_24px
 import shiguangschedule.shared.generated.resources.close_24px
 import shiguangschedule.shared.generated.resources.delete_24px
 import shiguangschedule.shared.generated.resources.image_24px
+import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.tune_24px
 import kotlin.math.roundToInt
 
@@ -278,43 +282,67 @@ fun CumtAiFloatingOverlay(
                         }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         if (messages.isNotEmpty()) {
-                            IconButton(
+                            Surface(
                                 onClick = { sessionRepo.clearConversation() },
-                                modifier = Modifier.size(34.dp)
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Icon(
-                                    vectorResource(Res.drawable.delete_24px),
-                                    contentDescription = "清空对话",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        vectorResource(Res.drawable.delete_24px),
+                                        contentDescription = "清空对话",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
-                        TextButton(
+                        Surface(
                             onClick = {
                                 sessionRepo.setQuickSheetOpen(false)
                                 onNavigate(Destination.CumtAiCourseImport)
+                            },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    vectorResource(Res.drawable.tune_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "设置",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
-                        ) {
-                            Icon(
-                                vectorResource(Res.drawable.tune_24px),
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("全屏/设置")
                         }
-                        IconButton(
+                        Surface(
                             onClick = { sessionRepo.setQuickSheetOpen(false) },
-                            modifier = Modifier.size(34.dp)
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(
-                                vectorResource(Res.drawable.close_24px),
-                                contentDescription = "关闭",
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    vectorResource(Res.drawable.close_24px),
+                                    contentDescription = "关闭",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -353,6 +381,10 @@ fun CumtAiFloatingOverlay(
                     }
                 }
 
+                val chipBorder = BorderStroke(
+                    width = 0.8.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -362,7 +394,20 @@ fun CumtAiFloatingOverlay(
                 ) {
                     SuggestionChip(
                         onClick = { fileManager.pickImage() },
-                        label = { Text("📷 传实验图导课") }
+                        shape = CircleShape,
+                        border = chipBorder,
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        icon = {
+                            Icon(
+                                vectorResource(Res.drawable.image_24px),
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        label = { Text("传实验图导课", style = MaterialTheme.typography.labelMedium) }
                     )
                     quickChips.forEach { prompt ->
                         SuggestionChip(
@@ -380,7 +425,12 @@ fun CumtAiFloatingOverlay(
                                     )
                                 }
                             },
-                            label = { Text(prompt) }
+                            shape = CircleShape,
+                            border = chipBorder,
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                            ),
+                            label = { Text(prompt, style = MaterialTheme.typography.labelMedium) }
                         )
                     }
                 }
@@ -393,7 +443,8 @@ fun CumtAiFloatingOverlay(
                         emptySubtitle = "发文字加课/调课/查空课，或点左下角传实验安排截图，确认后背景课表实时刷新。",
                         onConfirmAction = sessionRepo::confirmPendingAction,
                         onRejectAction = sessionRepo::rejectPendingAction,
-                        onConfirmAllActions = sessionRepo::confirmAllPendingActions
+                        onConfirmAllActions = sessionRepo::confirmAllPendingActions,
+                        onUndoAction = sessionRepo::undoAppliedAction
                     )
                 }
 
@@ -404,6 +455,7 @@ fun CumtAiFloatingOverlay(
                     onPickImage = { fileManager.pickImage() },
                     onRemoveImage = { attachedImage = null },
                     isBusy = isBusy,
+                    onCancelBusy = sessionRepo::cancelCurrentTurn,
                     onSend = {
                         val txt = inputText
                         val img = attachedImage
@@ -594,10 +646,10 @@ private fun AiDraggableFloatingOrb(
                 .pointerInput(leftSnapX, rightSnapX, minYPx, maxYPx) {
                     detectDragGestures(
                         onDragStart = {
+                            dragX = resolvedTargetX.coerceIn(leftSnapX, rightSnapX)
                             isDragging = true
                             isIdlePeeked = false
                             interactionTick++
-                            dragX = if (isOnRight) rightSnapX else leftSnapX
                         },
                         onDragEnd = {
                             isDragging = false
@@ -623,8 +675,12 @@ private fun AiDraggableFloatingOrb(
                 }
                 .clickable {
                     interactionTick++
-                    isIdlePeeked = false
-                    onClick()
+                    if (isIdlePeeked) {
+                        // 半隐状态下首次轻触先优雅探出完整悬浮球，防边缘误触直接弹大面板
+                        isIdlePeeked = false
+                    } else {
+                        onClick()
+                    }
                 }
         ) {
             AiOrbAvatarSurface(
@@ -646,6 +702,7 @@ internal fun AiChatMessageList(
     onConfirmAction: (String, String) -> Unit,
     onRejectAction: (String, String) -> Unit,
     onConfirmAllActions: (String) -> Unit,
+    onUndoAction: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
@@ -703,7 +760,8 @@ internal fun AiChatMessageList(
                 message = msg,
                 onConfirmAction = { actId -> onConfirmAction(msg.id, actId) },
                 onRejectAction = { actId -> onRejectAction(msg.id, actId) },
-                onConfirmAll = { onConfirmAllActions(msg.id) }
+                onConfirmAll = { onConfirmAllActions(msg.id) },
+                onUndoAction = { actId -> onUndoAction(msg.id, actId) }
             )
         }
 
@@ -734,7 +792,8 @@ private fun AiChatBubbleItem(
     message: CumtAiChatMessage,
     onConfirmAction: (String) -> Unit,
     onRejectAction: (String) -> Unit,
-    onConfirmAll: () -> Unit
+    onConfirmAll: () -> Unit,
+    onUndoAction: (String) -> Unit
 ) {
     val isUser = message.role == "user"
     val contentColor = when {
@@ -773,18 +832,29 @@ private fun AiChatBubbleItem(
             ) {
                 if (message.hasImage && message.imageNote.isNotBlank()) {
                     CumtStatusPill(
-                        text = "📷 ${message.imageNote}",
-                        containerColor = Color.White.copy(alpha = 0.2f),
+                        text = message.imageNote,
+                        icon = Res.drawable.image_24px,
+                        containerColor = if (isUser) {
+                            Color.White.copy(alpha = 0.2f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
                         contentColor = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
                     )
                 }
                 if (message.toolTrace.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         message.toolTrace.forEach { trace ->
-                            Text(
-                                text = trace,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                            val cleanTrace = trace
+                                .removePrefix("🔧")
+                                .removePrefix("✅")
+                                .removePrefix("⚡")
+                                .trim()
+                            CumtStatusPill(
+                                text = cleanTrace,
+                                dotColor = MaterialTheme.colorScheme.primary,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -792,7 +862,7 @@ private fun AiChatBubbleItem(
                 if (isUser || message.isError) {
                     Text(
                         text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 21.sp),
                         color = contentColor
                     )
                 } else {
@@ -815,7 +885,8 @@ private fun AiChatBubbleItem(
                     AiPendingActionCard(
                         action = action,
                         onConfirm = { onConfirmAction(action.id) },
-                        onReject = { onRejectAction(action.id) }
+                        onReject = { onRejectAction(action.id) },
+                        onUndo = { onUndoAction(action.id) }
                     )
                 }
                 if (pendingCount > 1) {
@@ -870,7 +941,7 @@ internal fun AiLightweightMarkdownText(
                 }
                 Text(
                     text = annotated,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
                     color = textColor
                 )
             }
@@ -948,17 +1019,20 @@ private fun AnnotatedString.Builder.appendInlineSpans(line: String, codeBg: Colo
 private fun AiPendingActionCard(
     action: CumtAiPendingAction,
     onConfirm: () -> Unit,
-    onReject: () -> Unit
+    onReject: () -> Unit,
+    onUndo: () -> Unit
 ) {
     val accent = when (action.status) {
-        CumtAiActionStatus.PENDING -> CumtAccent.VIOLET
+        CumtAiActionStatus.PENDING -> if (action.conflictWarnings.isNotEmpty()) CumtAccent.AMBER else CumtAccent.VIOLET
         CumtAiActionStatus.APPLIED -> CumtAccent.EMERALD
+        CumtAiActionStatus.UNDONE -> CumtAccent.SLATE
         CumtAiActionStatus.REJECTED -> CumtAccent.SLATE
         CumtAiActionStatus.FAILED -> CumtAccent.CORAL
     }
     val statusLabel = when (action.status) {
-        CumtAiActionStatus.PENDING -> "待确认"
+        CumtAiActionStatus.PENDING -> if (action.conflictWarnings.isNotEmpty()) "待确认·有重叠" else "待确认"
         CumtAiActionStatus.APPLIED -> "已应用"
+        CumtAiActionStatus.UNDONE -> "已撤回"
         CumtAiActionStatus.REJECTED -> "已取消"
         CumtAiActionStatus.FAILED -> "执行失败"
     }
@@ -1023,13 +1097,62 @@ private fun AiPendingActionCard(
                     }
                 }
             }
+            if (action.conflictWarnings.isNotEmpty() && action.status == CumtAiActionStatus.PENDING) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = CumtAccent.AMBER.containerColor(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                vectorResource(Res.drawable.info_24px),
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = CumtAccent.AMBER.contentColor()
+                            )
+                            Text(
+                                text = "时间冲突提醒",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = CumtAccent.AMBER.contentColor()
+                            )
+                        }
+                        action.conflictWarnings.forEach { warn ->
+                            Text(
+                                text = "• $warn",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = CumtAccent.AMBER.contentColor()
+                            )
+                        }
+                    }
+                }
+            }
             if (action.resultMessage.isNotBlank()) {
-                Text(
-                    text = action.resultMessage,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = accent.contentColor()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = action.resultMessage,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent.contentColor(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (action.status == CumtAiActionStatus.APPLIED && action.createdCourseIds.isNotEmpty()) {
+                        TextButton(onClick = onUndo) {
+                            Text("撤回导入", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
             }
             if (action.status == CumtAiActionStatus.PENDING) {
                 Row(
@@ -1072,98 +1195,149 @@ internal fun AiMultimodalInputBar(
     onPickImage: () -> Unit,
     onRemoveImage: () -> Unit,
     isBusy: Boolean,
+    onCancelBusy: () -> Unit = {},
     onSend: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        tonalElevation = 2.dp,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.fillMaxWidth()
+    val canSend = text.isNotBlank() || attachedImage != null
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.78f),
+            border = BorderStroke(
+                width = 0.8.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            ),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (attachedImage != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                    ) {
-                        Image(
-                            bitmap = attachedImage,
-                            contentDescription = "待发送图片",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    Text(
-                        text = "已附加图片（${attachedImage.width}×${attachedImage.height}）",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = onRemoveImage, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            vectorResource(Res.drawable.close_24px),
-                            contentDescription = "移除图片",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                IconButton(
-                    onClick = onPickImage,
-                    enabled = !isBusy,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        vectorResource(Res.drawable.image_24px),
-                        contentDescription = "添加实验表或课表图片",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                if (attachedImage != null) {
+                    Row(
+                        modifier = Modifier.padding(start = 6.dp, end = 4.dp, top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        ) {
+                            Image(
+                                bitmap = attachedImage,
+                                contentDescription = "待发送图片",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        Text(
+                            text = "已附加图片 · ${attachedImage.width}×${attachedImage.height}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = onRemoveImage, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                vectorResource(Res.drawable.close_24px),
+                                contentDescription = "移除图片",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
 
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = onTextChange,
-                    placeholder = { Text("输入文字加/调/查课，或发实验安排图...") },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(18.dp),
-                    modifier = Modifier.weight(1f)
-                )
-
-                FilledIconButton(
-                    onClick = onSend,
-                    enabled = !isBusy && (text.isNotBlank() || attachedImage != null),
-                    modifier = Modifier.size(46.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    Surface(
+                        onClick = onPickImage,
+                        enabled = !isBusy,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                vectorResource(Res.drawable.image_24px),
+                                contentDescription = "添加实验表或课表图片",
+                                modifier = Modifier.size(19.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        maxLines = 4,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 20.sp
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier
+                            .weight(1f)
+                            .align(Alignment.CenterVertically)
+                            .padding(horizontal = 4.dp, vertical = 7.dp),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (text.isEmpty()) {
+                                    Text(
+                                        text = "输入加/调/查课指令，或上传实验图…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+
                     if (isBusy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                        FilledIconButton(
+                            onClick = onCancelBusy,
+                            modifier = Modifier.size(38.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        ) {
+                            Icon(
+                                vectorResource(Res.drawable.close_24px),
+                                contentDescription = "停止生成",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     } else {
-                        Icon(
-                            vectorResource(Res.drawable.arrow_forward_24px),
-                            contentDescription = "发送"
-                        )
+                        FilledIconButton(
+                            onClick = onSend,
+                            enabled = canSend,
+                            modifier = Modifier.size(38.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.onSurface,
+                                contentColor = MaterialTheme.colorScheme.surface,
+                                disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
+                            )
+                        ) {
+                            Icon(
+                                vectorResource(Res.drawable.arrow_upward_24px),
+                                contentDescription = "发送",
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
                     }
                 }
             }

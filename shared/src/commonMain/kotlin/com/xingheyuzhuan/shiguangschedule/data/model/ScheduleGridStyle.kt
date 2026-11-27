@@ -58,6 +58,7 @@ data class ScheduleGridStyle(
     val courseBlockOuterPaddingDp: Float = DEFAULT_BLOCK_OUTER_PADDING,
     val courseBlockInnerPaddingDp: Float = DEFAULT_BLOCK_INNER_PADDING,
     val courseBlockAlphaFloat: Float = DEFAULT_BLOCK_ALPHA,
+    val hasCustomAlpha: Boolean = false,
 
     // 颜色列表
     val courseColorMaps: List<DualColor> = DEFAULT_COLOR_MAPS,
@@ -207,6 +208,7 @@ fun ScheduleGridStyleProto.toCompose(): ScheduleGridStyle {
 
         // 3. 透明度与缩放
         courseBlockAlphaFloat = this.course_block_alpha_float ?: d.courseBlockAlphaFloat,
+        hasCustomAlpha = this.course_block_alpha_float != null,
         courseBlockFontScale = this.course_block_font_scale ?: d.courseBlockFontScale,
 
         // 5. 列表转换

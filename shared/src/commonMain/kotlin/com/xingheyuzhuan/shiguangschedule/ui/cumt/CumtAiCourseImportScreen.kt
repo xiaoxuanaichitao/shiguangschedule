@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -97,14 +98,18 @@ import org.jetbrains.compose.resources.vectorResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.annotation.KoinViewModel
 import shiguangschedule.shared.generated.resources.Res
+import shiguangschedule.shared.generated.resources.award_star_24px
 import shiguangschedule.shared.generated.resources.bolt_24px
 import shiguangschedule.shared.generated.resources.check_24px
 import shiguangschedule.shared.generated.resources.content_copy_24px
 import shiguangschedule.shared.generated.resources.delete_24px
+import shiguangschedule.shared.generated.resources.edit_24px
 import shiguangschedule.shared.generated.resources.info_24px
 import shiguangschedule.shared.generated.resources.refresh_24px
 import shiguangschedule.shared.generated.resources.save_24px
+import shiguangschedule.shared.generated.resources.schedule_24px
 import shiguangschedule.shared.generated.resources.search_24px
+import shiguangschedule.shared.generated.resources.swap_horiz_24px
 
 @KoinViewModel
 class CumtAiCourseImportViewModel(
@@ -202,7 +207,19 @@ class CumtAiCourseImportViewModel(
             localRepo.saveCachedAiModels(emptyList())
             _savedApiKey.value = ""
             _testStatusMessage.value = null
-            ToastManager.show("已清除本地保存的 API Key")
+            ToastManager.show("已清除当前服务商保存的 API Key")
+        }
+    }
+
+    fun switchProviderSlot(
+        preset: CumtAiProviderPreset,
+        onLoaded: (CumtAiConfig, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val (cfg, key) = localRepo.loadOrSwitchAiProviderSlot(preset.id)
+            _savedApiKey.value = key
+            _testStatusMessage.value = null
+            onLoaded(cfg, key)
         }
     }
 
@@ -454,7 +471,11 @@ private fun AiChatTabContent(
             }
         }
 
-        // 场景快捷指令行
+        // 场景快捷指令行（克制线性图标胶囊，不堆砌彩色 Emoji）
+        val chipBorder = BorderStroke(
+            width = 0.8.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -464,19 +485,49 @@ private fun AiChatTabContent(
         ) {
             SuggestionChip(
                 onClick = { fileManager.pickImage() },
-                label = { Text("📷 上传实验安排图") }
+                shape = CircleShape,
+                border = chipBorder,
+                icon = {
+                    Icon(
+                        vectorResource(Res.drawable.image_24px),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                label = { Text("上传实验安排图") }
             )
             SuggestionChip(
                 onClick = {
                     inputText = "帮我在第11周周六第1-2节加一门《二阶系统实验》，地点信控-A205，老师周晨"
                 },
-                label = { Text("✏️ 文字加课") }
+                shape = CircleShape,
+                border = chipBorder,
+                icon = {
+                    Icon(
+                        vectorResource(Res.drawable.edit_24px),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                label = { Text("文字加课") }
             )
             SuggestionChip(
                 onClick = {
                     inputText = "把我本周三的课程调到第13周周六5-6节"
                 },
-                label = { Text("🔄 文字调课") }
+                shape = CircleShape,
+                border = chipBorder,
+                icon = {
+                    Icon(
+                        vectorResource(Res.drawable.swap_horiz_24px),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                label = { Text("文字调课") }
             )
             SuggestionChip(
                 onClick = {
@@ -486,7 +537,17 @@ private fun AiChatTabContent(
                         onNeedApiKey = onJumpToSettings
                     )
                 },
-                label = { Text("🕒 查本周空课") }
+                shape = CircleShape,
+                border = chipBorder,
+                icon = {
+                    Icon(
+                        vectorResource(Res.drawable.schedule_24px),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                label = { Text("查本周空课") }
             )
             SuggestionChip(
                 onClick = {
@@ -496,7 +557,17 @@ private fun AiChatTabContent(
                         onNeedApiKey = onJumpToSettings
                     )
                 },
-                label = { Text("📊 查考表与绩点") }
+                shape = CircleShape,
+                border = chipBorder,
+                icon = {
+                    Icon(
+                        vectorResource(Res.drawable.award_star_24px),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                label = { Text("查考表与绩点") }
             )
         }
 
@@ -508,7 +579,8 @@ private fun AiChatTabContent(
                 emptySubtitle = "支持自然语言加课/调课/停课/删课、查空课/考试/绩点，也支持直接传实验安排表图片一键解析导入。",
                 onConfirmAction = sessionRepo::confirmPendingAction,
                 onRejectAction = sessionRepo::rejectPendingAction,
-                onConfirmAllActions = sessionRepo::confirmAllPendingActions
+                onConfirmAllActions = sessionRepo::confirmAllPendingActions,
+                onUndoAction = sessionRepo::undoAppliedAction
             )
         }
 
@@ -519,6 +591,7 @@ private fun AiChatTabContent(
             onPickImage = { fileManager.pickImage() },
             onRemoveImage = { attachedImage = null },
             isBusy = isBusy,
+            onCancelBusy = sessionRepo::cancelCurrentTurn,
             onSend = {
                 val txt = inputText
                 val img = attachedImage
@@ -602,11 +675,12 @@ private fun AiModelSettingsTabContent(
                             FilterChip(
                                 selected = draftProviderId == preset.id,
                                 onClick = {
-                                    draftProviderId = preset.id
-                                    draftProtocol = preset.protocol
-                                    if (preset != CumtAiProviderPreset.CUSTOM) {
-                                        draftBaseUrl = preset.defaultBaseUrl
-                                        draftModel = preset.defaultModel
+                                    viewModel.switchProviderSlot(preset) { loadedCfg, loadedKey ->
+                                        draftProviderId = loadedCfg.providerId
+                                        draftProtocol = loadedCfg.protocolEnum
+                                        draftBaseUrl = loadedCfg.baseUrl
+                                        draftModel = loadedCfg.model
+                                        draftApiKey = loadedKey
                                     }
                                 },
                                 label = { Text(preset.displayName) }

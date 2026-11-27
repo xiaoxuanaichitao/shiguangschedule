@@ -45,13 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.xingheyuzhuan.shiguangschedule.Destination
 import com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTable
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleModeProto
@@ -64,6 +63,8 @@ import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGrid
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridActions
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridStyleComposed
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridViewState
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleWallpaperBackdrop
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperHeaderTextShadow
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WeekSelectorBottomSheet
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.rememberScheduleGridState
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.MergedCourseBlock
@@ -148,8 +149,17 @@ fun WeeklyScheduleScreen(
     var isGridHolding by remember { mutableStateOf(false) }
     var selectedBlockForDetail by remember { mutableStateOf<MergedCourseBlock?>(null) }
 
-    val composedStyle by remember(uiState.style) {
-        derivedStateOf { with(ScheduleGridStyleComposed) { uiState.style.toComposedStyle() } }
+    val hasWallpaper = uiState.wallpaperVisuals.hasWallpaper
+    val composedStyle by remember(uiState.style, uiState.wallpaperVisuals) {
+        derivedStateOf {
+            with(ScheduleGridStyleComposed) {
+                uiState.style.toComposedStyle(
+                    hasWallpaper = uiState.wallpaperVisuals.hasWallpaper,
+                    glassEnabled = uiState.wallpaperVisuals.glassEnabled,
+                    cardFrost = uiState.wallpaperVisuals.cardFrost
+                )
+            }
+        }
     }
 
     val floatingCourse = uiState.floatingCourse
@@ -175,12 +185,17 @@ fun WeeklyScheduleScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val gridScrollState = rememberScrollState()
 
-    val customTextColor = composedStyle.pageTextColor ?: MaterialTheme.colorScheme.onSurface
-    val customSubTextColor = customTextColor.copy(alpha = 0.7f)
+    val customTextColor = composedStyle.pageTextColor ?: if (hasWallpaper) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val customSubTextColor = customTextColor.copy(alpha = if (hasWallpaper) 0.85f else 0.7f)
+    val headerShadow = if (hasWallpaper && composedStyle.pageTextColor == null) WallpaperHeaderTextShadow else null
 
     val (displayTitle, titleTextColor) = when {
         !uiState.isSemesterSet || uiState.semesterStartDate == null -> {
-            stringResource(Res.string.title_semester_not_set) to MaterialTheme.colorScheme.error
+            stringResource(Res.string.title_semester_not_set) to (if (hasWallpaper) Color(0xFFFFB4AB) else MaterialTheme.colorScheme.error)
         }
         uiState.daysUntilStart > 0 -> {
             stringResource(Res.string.title_vacation_until_start, uiState.daysUntilStart.toString()) to customTextColor
@@ -203,7 +218,7 @@ fun WeeklyScheduleScreen(
     val systemNavigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val dynamicBottomOffset = systemNavigationBarInset + (88.dp * (1f - navHideFraction))
 
-    val screenBgModifier = if (uiState.wallpaperPath == null) {
+    val screenBgModifier = if (!hasWallpaper) {
         if (isDark) {
             Modifier.background(MaterialTheme.colorScheme.background)
         } else {
@@ -218,13 +233,8 @@ fun WeeklyScheduleScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().then(screenBgModifier)) {
-        uiState.wallpaperPath?.let { path ->
-            AsyncImage(
-                model = path,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+        if (hasWallpaper) {
+            ScheduleWallpaperBackdrop(visuals = uiState.wallpaperVisuals)
         }
 
         Scaffold(
@@ -253,7 +263,8 @@ fun WeeklyScheduleScreen(
                                 text = displayTitle,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = titleTextColor
+                                color = titleTextColor,
+                                style = TextStyle(shadow = headerShadow)
                             )
                             Spacer(modifier = Modifier.width(2.dp))
                             Icon(

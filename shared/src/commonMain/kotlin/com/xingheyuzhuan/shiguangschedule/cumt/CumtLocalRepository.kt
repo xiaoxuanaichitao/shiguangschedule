@@ -66,6 +66,8 @@ class CumtLocalRepository(
         val KEY_AI_ORB_CUSTOM_IMAGE = stringPreferencesKey("cumt_ai_orb_custom_image")
         val KEY_AI_QUICK_SHEET_HEIGHT = floatPreferencesKey("cumt_ai_quick_sheet_height")
         val KEY_AI_AUTO_EXEC_WRITES = booleanPreferencesKey("cumt_ai_auto_exec_writes")
+        val KEY_AI_PROVIDER_SLOTS_JSON = stringPreferencesKey("cumt_ai_provider_slots_json")
+        val KEY_AI_CHAT_HISTORY_JSON = stringPreferencesKey("cumt_ai_chat_history_json")
 
         val KEY_MCP_ENABLED = booleanPreferencesKey("cumt_mcp_enabled")
         val KEY_MCP_PORT = intPreferencesKey("cumt_mcp_port")
@@ -128,6 +130,16 @@ class CumtLocalRepository(
             prefs.remove(KEY_CAS_PLAIN_FALLBACK)
             prefs.remove(KEY_CAS_NAME)
             prefs.remove(KEY_CAS_PHONE)
+        }
+    }
+
+    suspend fun updateProfileNameIfBlank(studentName: String) {
+        val clean = studentName.trim()
+        if (clean.isEmpty()) return
+        dataStore.edit { prefs ->
+            if (prefs[KEY_CAS_NAME].isNullOrBlank()) {
+                prefs[KEY_CAS_NAME] = clean
+            }
         }
     }
 
@@ -378,10 +390,87 @@ class CumtLocalRepository(
         }.getOrDefault(emptyList())
     }
 
-    suspend fun saveCachedAiModels(models: List<CumtAiModelInfo>) {
+    suspend fun saveCachedAiModels(models: List<CumtAiModelInfo>, providerIdOverride: String? = null) {
+        val prefsSnap = dataStore.data.first()
+        val activeProvider = providerIdOverride ?: CumtAiProviderPreset.fromId(prefsSnap[KEY_AI_PROVIDER_ID]).id
+        val currentSlots = decodeProviderSlots(prefsSnap[KEY_AI_CACHED_MODELS_JSON], prefsSnap[KEY_AI_PROVIDER_SLOTS_JSON]).toMutableMap()
+        val existingSlot = currentSlots[activeProvider]
+        if (existingSlot != null) {
+            currentSlots[activeProvider] = existingSlot.copy(cachedModels = models)
+        }
         dataStore.edit { prefs ->
             prefs[KEY_AI_CACHED_MODELS_JSON] =
                 json.encodeToString(ListSerializer(CumtAiModelInfo.serializer()), models)
+            if (currentSlots.isNotEmpty()) {
+                prefs[KEY_AI_PROVIDER_SLOTS_JSON] =
+                    json.encodeToString(ListSerializer(CumtAiProviderSlot.serializer()), currentSlots.values.toList())
+            }
+        }
+    }
+
+    private fun decodeProviderSlots(
+        @Suppress("UNUSED_PARAMETER") unused: String?,
+        slotsRaw: String?
+    ): Map<String, CumtAiProviderSlot> {
+        if (slotsRaw.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            json.decodeFromString(ListSerializer(CumtAiProviderSlot.serializer()), slotsRaw)
+                .associateBy { it.providerId }
+        }.getOrDefault(emptyMap())
+    }
+
+    suspend fun loadOrSwitchAiProviderSlot(providerId: String): Pair<CumtAiConfig, String> {
+        val preset = CumtAiProviderPreset.fromId(providerId)
+        val prefs = dataStore.data.first()
+        val slots = decodeProviderSlots(null, prefs[KEY_AI_PROVIDER_SLOTS_JSON])
+        val slot = slots[preset.id]
+        if (slot != null) {
+            val decryptedKey = when {
+                slot.encryptedApiKey.isNotEmpty() && slot.iv.isNotEmpty() ->
+                    secureCrypto.decrypt(slot.encryptedApiKey, slot.iv) ?: slot.plainFallbackKey
+                else -> slot.plainFallbackKey
+            }.trim()
+            saveAiConfig(
+                providerId = preset.id,
+                baseUrl = slot.baseUrl.ifBlank { preset.defaultBaseUrl },
+                model = slot.model.ifBlank { preset.defaultModel },
+                protocol = CumtAiProtocol.fromName(slot.protocol),
+                apiKey = decryptedKey
+            )
+            dataStore.edit { p ->
+                p[KEY_AI_CACHED_MODELS_JSON] =
+                    json.encodeToString(ListSerializer(CumtAiModelInfo.serializer()), slot.cachedModels)
+            }
+            return aiConfigFlow.first() to decryptedKey
+        }
+        // 该服务商尚未保存过独立档案：切回预设默认地址/模型，Key 置空，不破坏其他服务商已存档案
+        val emptyCfg = aiConfigFlow.first().copy(
+            providerId = preset.id,
+            baseUrl = preset.defaultBaseUrl,
+            model = preset.defaultModel,
+            protocol = preset.protocol.name,
+            hasApiKey = false
+        )
+        return emptyCfg to ""
+    }
+
+    suspend fun loadSavedChatHistory(): List<CumtAiChatMessage> {
+        val raw = dataStore.data.first()[KEY_AI_CHAT_HISTORY_JSON].orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            json.decodeFromString(ListSerializer(CumtAiChatMessage.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveChatHistory(messages: List<CumtAiChatMessage>) {
+        val trimmed = messages.takeLast(30)
+        dataStore.edit { prefs ->
+            if (trimmed.isEmpty()) {
+                prefs.remove(KEY_AI_CHAT_HISTORY_JSON)
+            } else {
+                prefs[KEY_AI_CHAT_HISTORY_JSON] =
+                    json.encodeToString(ListSerializer(CumtAiChatMessage.serializer()), trimmed)
+            }
         }
     }
 
@@ -461,11 +550,26 @@ class CumtLocalRepository(
     ) {
         val trimmedKey = apiKey.trim()
         val crypto = if (trimmedKey.isNotEmpty()) secureCrypto.encrypt(trimmedKey) else null
+        val prefsSnap = dataStore.data.first()
+        val slots = decodeProviderSlots(null, prefsSnap[KEY_AI_PROVIDER_SLOTS_JSON]).toMutableMap()
+        val prevModels = slots[providerId]?.cachedModels.orEmpty()
+        slots[providerId] = CumtAiProviderSlot(
+            providerId = providerId,
+            baseUrl = baseUrl.trim(),
+            model = model.trim(),
+            protocol = protocol.name,
+            encryptedApiKey = if (trimmedKey.isNotEmpty() && crypto != null) crypto.encryptedData else "",
+            iv = if (trimmedKey.isNotEmpty() && crypto != null) crypto.iv else "",
+            plainFallbackKey = if (trimmedKey.isNotEmpty() && crypto == null) trimmedKey else "",
+            cachedModels = prevModels
+        )
         dataStore.edit { prefs ->
             prefs[KEY_AI_PROVIDER_ID] = providerId
             prefs[KEY_AI_BASE_URL] = baseUrl.trim()
             prefs[KEY_AI_MODEL] = model.trim()
             prefs[KEY_AI_PROTOCOL] = protocol.name
+            prefs[KEY_AI_PROVIDER_SLOTS_JSON] =
+                json.encodeToString(ListSerializer(CumtAiProviderSlot.serializer()), slots.values.toList())
             if (trimmedKey.isEmpty()) {
                 prefs.remove(KEY_AI_ENC_API_KEY)
                 prefs.remove(KEY_AI_API_KEY_IV)
@@ -483,10 +587,16 @@ class CumtLocalRepository(
     }
 
     suspend fun clearAiApiKey() {
+        val prefsSnap = dataStore.data.first()
+        val activeProvider = CumtAiProviderPreset.fromId(prefsSnap[KEY_AI_PROVIDER_ID]).id
+        val slots = decodeProviderSlots(null, prefsSnap[KEY_AI_PROVIDER_SLOTS_JSON]).toMutableMap()
+        slots.remove(activeProvider)
         dataStore.edit { prefs ->
             prefs.remove(KEY_AI_ENC_API_KEY)
             prefs.remove(KEY_AI_API_KEY_IV)
             prefs.remove(KEY_AI_PLAIN_FALLBACK)
+            prefs[KEY_AI_PROVIDER_SLOTS_JSON] =
+                json.encodeToString(ListSerializer(CumtAiProviderSlot.serializer()), slots.values.toList())
         }
     }
 }

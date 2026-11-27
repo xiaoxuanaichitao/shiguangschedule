@@ -478,9 +478,22 @@ data class CumtAiRecognizedCourse(
 )
 
 @Serializable
+data class CumtAiProviderSlot(
+    val providerId: String,
+    val baseUrl: String = "",
+    val model: String = "",
+    val protocol: String = CumtAiProtocol.OPENAI_COMPATIBLE.name,
+    val encryptedApiKey: String = "",
+    val iv: String = "",
+    val plainFallbackKey: String = "",
+    val cachedModels: List<CumtAiModelInfo> = emptyList()
+)
+
+@Serializable
 enum class CumtAiActionStatus {
     PENDING,
     APPLIED,
+    UNDONE,
     REJECTED,
     FAILED
 }
@@ -492,9 +505,11 @@ data class CumtAiPendingAction(
     val title: String,
     val summary: String,
     val detailLines: List<String> = emptyList(),
+    val conflictWarnings: List<String> = emptyList(),
     val argumentsJson: String,
     val status: CumtAiActionStatus = CumtAiActionStatus.PENDING,
-    val resultMessage: String = ""
+    val resultMessage: String = "",
+    val createdCourseIds: List<String> = emptyList()
 )
 
 @Serializable

@@ -25,8 +25,10 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAutoLoginCoordinator
+import com.xingheyuzhuan.shiguangschedule.data.model.AppSettingsModel
 import com.xingheyuzhuan.shiguangschedule.data.model.StartScreen
 import com.xingheyuzhuan.shiguangschedule.tool.ExternalFileManager
+import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdaptiveNavigationScaffold
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CampusDiscoverScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtAiCourseImportScreen
@@ -68,6 +70,7 @@ import com.xingheyuzhuan.shiguangschedule.ui.settings.time.ComboScheduleEditScre
 import com.xingheyuzhuan.shiguangschedule.ui.settings.time.SingleScheduleEditScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.time.TimeScheduleManagementScreen
 import com.xingheyuzhuan.shiguangschedule.ui.theme.ShiguangScheduleTheme
+import com.xingheyuzhuan.shiguangschedule.ui.theme.SyncImmersiveStatusBarIcons
 import com.xingheyuzhuan.shiguangschedule.ui.today.TodayScheduleScreen
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -90,7 +93,10 @@ fun App() {
                     StartScreen.TODAY_SCHEDULE -> Destination.TodaySchedule
                 }
             }
-            AppNavigation(startDestination = startDest)
+            AppNavigation(
+                startDestination = startDest,
+                appSettings = state.appSettings
+            )
         }
     } else {
         Surface(modifier = Modifier.fillMaxSize()) {}
@@ -98,7 +104,10 @@ fun App() {
 }
 
 @Composable
-fun AppNavigation(startDestination: Destination) {
+fun AppNavigation(
+    startDestination: Destination,
+    appSettings: AppSettingsModel = AppSettingsModel()
+) {
     val backStack = rememberNavBackStack(
         configuration = navSavedStateConfig,
         startDestination
@@ -141,13 +150,27 @@ fun AppNavigation(startDestination: Destination) {
     }
 
     val animSpec = tween<IntOffset>(300)
+    val isDark = LocalIsDarkTheme.current
+    val activeWallpaperRaw = if (appSettings.wallpaperFollowDarkMode) {
+        if (isDark) appSettings.backgroundImagePath.dark else appSettings.backgroundImagePath.light
+    } else {
+        appSettings.backgroundImagePath.light.ifEmpty { appSettings.backgroundImagePath.dark }
+    }
+    val useFrostedNavDock = (currentDestination == Destination.CourseSchedule || currentDestination == Destination.TodaySchedule) &&
+        activeWallpaperRaw.isNotBlank()
+
+    SyncImmersiveStatusBarIcons(
+        forceLightContent = useFrostedNavDock,
+        darkTheme = isDark
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         AdaptiveNavigationScaffold(
             currentDestination = currentDestination,
             onTabSelected = onNavigate,
             showNavigation = currentDestination.isMainScreen,
-            navHideFractionProvider = { navHideFraction }
+            navHideFractionProvider = { navHideFraction },
+            isFrostedGlass = useFrostedNavDock
         ) { _ ->
             NavDisplay(
                 backStack = backStack,

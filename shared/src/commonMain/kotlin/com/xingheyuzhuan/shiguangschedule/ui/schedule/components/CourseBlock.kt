@@ -64,19 +64,18 @@ fun CourseBlock(
     }
     val fallbackColorAdapted: Color = if (isDarkTheme) style.courseColorMaps.first().dark else style.courseColorMaps.first().light
 
-    val currentAlpha = if (isFloating) 0.95f else style.courseBlockAlpha
+    val currentAlpha = if (isFloating) 0.95f else style.effectiveCourseAlpha
     val baseColor = courseColorAdapted ?: fallbackColorAdapted
-    val blockColor = baseColor.copy(alpha = currentAlpha)
-    val bottomBlockColor = baseColor.copy(alpha = (currentAlpha * 0.90f).coerceIn(0.1f, 1f))
-    val textColor = style.courseTextColor ?: if (baseColor.luminance() > 0.72f) {
-        Color(0xFF1C242B)
-    } else {
-        Color.White
+    val textColor = style.courseTextColor ?: when {
+        style.hasWallpaper -> Color.White
+        baseColor.luminance() > 0.72f -> Color(0xFF1C242B)
+        else -> Color.White
     }
+    val cardTextShadow = if (style.hasWallpaper && style.courseTextColor == null) WallpaperCardTextShadow else null
 
     // 字体大小
     val sTitle = (11.5f * style.fontScale).sp
-    val sSub = (9.5f * style.fontScale).sp
+    val sSub = (9.2f * style.fontScale).sp
     val sTime = (9f * style.fontScale).sp
 
     // 核心分支逻辑：判断 24小时模式 与 节次模式 的时间文本渲染
@@ -108,8 +107,9 @@ fun CourseBlock(
     // 边框样式配置
     val borderColor = if (isFloating) Color(0xFF2196F3) else MaterialTheme.colorScheme.outline
     val borderWidth = if (isFloating) 2.dp else 1.dp
-    val borderAlpha = if (isFloating) 1.0f else style.courseBlockAlpha
+    val borderAlpha = if (isFloating) 1.0f else currentAlpha
     val shape = RoundedCornerShape(style.courseBlockCornerRadius)
+    val hasExplicitBorder = style.borderType != BorderTypeProto.BORDER_TYPE_NONE || isFloating
 
     val borderModifier = when (style.borderType) {
         BorderTypeProto.BORDER_TYPE_SOLID -> {
@@ -144,20 +144,28 @@ fun CourseBlock(
 
     val showTeacher = !style.hideTeacher && course.teacher.isNotBlank()
     val showLocation = !style.hideLocation && course.position.isNotBlank()
+    val horizontalPad = (style.courseBlockInnerPadding - 1.5.dp).coerceAtLeast(2.5.dp)
 
     Box(
         modifier = modifier
             .then(floatingShadowModifier)
             .fillMaxSize()
             .then(borderModifier)
-            .clip(shape)
-            .background(
-                brush = Brush.verticalGradient(listOf(blockColor, bottomBlockColor))
+            .scheduleGlassCardSurface(
+                baseColor = baseColor,
+                alpha = currentAlpha,
+                cornerRadius = style.courseBlockCornerRadius,
+                hasWallpaper = style.hasWallpaper,
+                glassEnabled = style.glassEnabled && (style.hasWallpaper || currentAlpha < 0.96f),
+                cardFrost = style.cardFrost,
+                customBorderApplied = hasExplicitBorder
             )
     ) {
         // 课程文字内容容器
         Column(
-            modifier = Modifier.fillMaxSize().padding(style.courseBlockInnerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPad, vertical = style.courseBlockInnerPadding),
             horizontalAlignment = horizontalAlignment,
             verticalArrangement = verticalArrangement
         ) {
@@ -165,7 +173,7 @@ fun CourseBlock(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = Color.Black.copy(alpha = 0.14f),
+                            color = Color.Black.copy(alpha = 0.16f),
                             shape = RoundedCornerShape(4.dp)
                         )
                         .padding(horizontal = 4.dp, vertical = 1.dp)
@@ -177,7 +185,7 @@ fun CourseBlock(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         textAlign = textAlign,
-                        style = TextStyle(lineHeight = 1.1.em)
+                        style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
                     )
                 }
                 Spacer(modifier = Modifier.height(3.dp))
@@ -186,13 +194,13 @@ fun CourseBlock(
             Text(
                 text = course.name,
                 fontSize = sTitle,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.15.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.1.sp,
                 color = textColor,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = textAlign,
                 modifier = Modifier.weight(1f, fill = false),
-                style = TextStyle(lineHeight = 1.25.em)
+                style = TextStyle(lineHeight = 1.24.em, shadow = cardTextShadow)
             )
 
             if (showTeacher || showLocation) {
@@ -203,38 +211,40 @@ fun CourseBlock(
                 Text(
                     text = course.teacher,
                     fontSize = sSub,
-                    color = textColor.copy(alpha = 0.90f),
+                    color = textColor.copy(alpha = 0.92f),
                     textAlign = textAlign,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(lineHeight = 1.15.em)
+                    style = TextStyle(lineHeight = 1.15.em, shadow = cardTextShadow)
                 )
             }
 
             if (showLocation) {
-                val formattedPos = course.position
-                    .replace("南湖校区 ", "南湖校区\n")
-                    .replace("文昌校区 ", "文昌校区\n")
-                val prefix = if (style.removeLocationAt) "" else "@"
+                val formattedPos = formatCourseLocationCompact(course.position, style.removeLocationAt)
                 Text(
-                    text = "$prefix$formattedPos",
+                    text = formattedPos,
                     fontSize = sSub,
-                    color = textColor.copy(alpha = 0.88f),
+                    color = textColor.copy(alpha = 0.92f),
                     textAlign = textAlign,
                     overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(lineHeight = 1.2.em)
+                    style = TextStyle(lineHeight = 1.20.em, shadow = cardTextShadow)
                 )
             }
         }
 
         // 当单课不是当前周时，进行干净的全局遮罩染色与虚化斜线绘制
         if (isVisualDemoted && !isFloating) {
+            val demotedOverlay = if (style.hasWallpaper) {
+                Color.Black.copy(alpha = 0.34f)
+            } else {
+                (if (isDarkTheme) Color.Black else Color.White).copy(alpha = 0.618f)
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(color = (if (isDarkTheme) Color.Black else Color.White).copy(alpha = 0.618f))
+                    .background(color = demotedOverlay)
                     .drawBehind {
                         val stripeWidth = 5.dp.toPx()
-                        val stripeColor = (if (isDarkTheme) Color.White else Color.Black).copy(alpha = 0.06f)
+                        val stripeColor = (if (isDarkTheme || style.hasWallpaper) Color.White else Color.Black).copy(alpha = 0.08f)
                         val brush = Brush.linearGradient(
                             0.0f to stripeColor, 0.45f to stripeColor,
                             0.55f to Color.Transparent, 1.0f to Color.Transparent,

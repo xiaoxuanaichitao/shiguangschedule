@@ -6,11 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -262,14 +264,6 @@ fun CampusDiscoverScreen(
             onClick = { onNavigate(Destination.CumtCourseImport) }
         ),
         DiscoverToolItem(
-            title = "矿大 AI 助手",
-            subtitle = "对话排课 / 识图 / MCP",
-            icon = Res.drawable.image_24px,
-            accent = CumtAccent.VIOLET,
-            badge = if (aiConfig.hasApiKey) "已配置" else "配置 Key",
-            onClick = { onNavigate(Destination.CumtAiCourseImport) }
-        ),
-        DiscoverToolItem(
             title = "考试倒计时",
             subtitle = "抓考表与同步进课表",
             icon = Res.drawable.schedule_24px,
@@ -440,17 +434,25 @@ fun CampusDiscoverScreen(
                 }
             }
 
-            // 校园卡 & 宿舍电量双实时看板
+            // 校园卡 & 宿舍电量双实时看板（等高对齐）
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CumtSurfaceCard(
                         onClick = { onNavigate(Destination.CumtCampusCard) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -494,7 +496,8 @@ fun CampusDiscoverScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = CumtAccent.OCEAN.contentColor()
                             )
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.weight(1f))
+                            Spacer(Modifier.height(6.dp))
                             Text(
                                 text = "流水与在线充值",
                                 style = MaterialTheme.typography.labelSmall,
@@ -511,9 +514,15 @@ fun CampusDiscoverScreen(
 
                     CumtSurfaceCard(
                         onClick = { onNavigate(Destination.CumtDormPower) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(14.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -561,6 +570,7 @@ fun CampusDiscoverScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = powerAccent.contentColor()
                             )
+                            Spacer(Modifier.weight(1f))
                             Spacer(Modifier.height(6.dp))
                             if (dormPower.roomId.isNotBlank()) {
                                 LinearProgressIndicator(
@@ -587,6 +597,65 @@ fun CampusDiscoverScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                    }
+                }
+            }
+
+            // Notion 极简风「矿大 AI 助手」独立入口横幅（同时让下方矿大百宝箱形成对称 4x2 网格）
+            item {
+                CumtSurfaceCard(
+                    onClick = { onNavigate(Destination.CumtAiCourseImport) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 15.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AiOrbAvatarSurface(
+                            aiConfig = aiConfig,
+                            size = 44.dp
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "矿大 AI 课表助手",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                CumtStatusPill(
+                                    text = if (aiConfig.hasApiKey) "已就绪" else "去配置",
+                                    containerColor = if (aiConfig.hasApiKey) {
+                                        CumtAccent.EMERALD.containerColor()
+                                    } else {
+                                        CumtAccent.SLATE.containerColor()
+                                    },
+                                    contentColor = if (aiConfig.hasApiKey) {
+                                        CumtAccent.EMERALD.contentColor()
+                                    } else {
+                                        CumtAccent.SLATE.contentColor()
+                                    }
+                                )
+                            }
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = "自然语言加调课 · 实验表识图 · 悬浮窗与 MCP 服务",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            vectorResource(Res.drawable.chevron_right_24px),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

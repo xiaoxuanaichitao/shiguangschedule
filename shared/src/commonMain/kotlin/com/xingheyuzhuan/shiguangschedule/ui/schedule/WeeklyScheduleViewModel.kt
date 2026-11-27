@@ -10,6 +10,7 @@ import com.xingheyuzhuan.shiguangschedule.data.repository.CourseTableRepository
 import com.xingheyuzhuan.shiguangschedule.data.repository.StyleSettingsRepository
 import com.xingheyuzhuan.shiguangschedule.data.repository.TimeScheduleRepository
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridStyleComposed.Companion.toComposedStyle
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.ScheduleConfigPackage
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.model.WeeklyScheduleUiState
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.util.CourseMergeUtils.gridScaleToTime
@@ -188,6 +189,13 @@ class WeeklyScheduleViewModel(
                 fixInvalidCourseColors(currentWeekCourses.flatMap { it.courses }, configPkg.style)
 
                 val wallpaperPath = appSettingsRepository.getActiveWallpaperPath(isDark)
+                val wallpaperVisuals = WallpaperVisualConfig(
+                    wallpaperPath = wallpaperPath,
+                    blurDp = configPkg.settings.wallpaperBlurDp,
+                    dimAlpha = configPkg.settings.wallpaperDimAlpha,
+                    glassEnabled = configPkg.settings.wallpaperGlassEnabled,
+                    cardFrost = configPkg.settings.wallpaperCardFrost
+                )
 
                 val previousState = _uiState.value
 
@@ -208,7 +216,8 @@ class WeeklyScheduleViewModel(
                     daysUntilStart = daysUntil,
                     floatingCourse = previousState.floatingCourse,
                     floatingSourceWeek = previousState.floatingSourceWeek,
-                    wallpaperPath = wallpaperPath
+                    wallpaperPath = wallpaperPath,
+                    wallpaperVisuals = wallpaperVisuals
                 )
             }.collect { _uiState.value = it }
         }

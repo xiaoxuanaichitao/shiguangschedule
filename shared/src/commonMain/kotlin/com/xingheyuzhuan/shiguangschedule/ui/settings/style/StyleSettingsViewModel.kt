@@ -72,30 +72,63 @@ class StyleSettingsViewModel(
             initialValue = null
         )
 
-    // 订阅样式设置
-    val styleState: StateFlow<ScheduleGridStyleComposed?> = styleRepository.styleFlow
-        .map { it.toComposedStyle() }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = null
+    // 订阅样式设置（自动注入当前壁纸与玻璃质感状态）
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val styleState: StateFlow<ScheduleGridStyleComposed?> = combine(
+        styleRepository.styleFlow,
+        appSettingsRepository.getAppSettings(),
+        _isPreviewDark
+    ) { style, settings, isDark ->
+        val rawPath = if (settings.wallpaperFollowDarkMode) {
+            if (isDark) settings.backgroundImagePath.dark else settings.backgroundImagePath.light
+        } else {
+            settings.backgroundImagePath.light.ifEmpty { settings.backgroundImagePath.dark }
+        }
+        val validPath = appSettingsRepository.resolveValidWallpaperFile(rawPath)
+        style.toComposedStyle(
+            hasWallpaper = validPath != null,
+            glassEnabled = settings.wallpaperGlassEnabled,
+            cardFrost = settings.wallpaperCardFrost
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
 
     /**
-     * 根据当前的 _isPreviewDark 状态，精确获取对应的深色或浅色壁纸路径字符串
+     * 根据当前的 _isPreviewDark 与固定/跟随明暗策略，精确获取预览壁纸视觉参数
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val wallpaperPathState: StateFlow<String?> = combine(
         appSettingsRepository.getAppSettings(),
         _isPreviewDark
     ) { settings, isDark ->
-        val path = if (isDark) settings.backgroundImagePath.dark else settings.backgroundImagePath.light
-        path.ifBlank { null }
+        val path = if (settings.wallpaperFollowDarkMode) {
+            if (isDark) settings.backgroundImagePath.dark else settings.backgroundImagePath.light
+        } else {
+            settings.backgroundImagePath.light.ifEmpty { settings.backgroundImagePath.dark }
+        }
+        appSettingsRepository.resolveValidWallpaperFile(path)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = null
     )
+
+    val recentWallpapersState: StateFlow<List<String>> = appSettingsRepository.getAppSettings()
+        .map { settings ->
+            val candidates = (
+                settings.recentWallpapers +
+                    listOf(settings.backgroundImagePath.light, settings.backgroundImagePath.dark)
+                ).filter { it.isNotBlank() }.distinct()
+            candidates.mapNotNull { appSettingsRepository.resolveValidWallpaperFile(it) }.distinct().take(3)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val demoUiState: StateFlow<WeeklyScheduleUiState> = appSettingsRepository.getAppSettings()
@@ -136,68 +169,136 @@ class StyleSettingsViewModel(
 
 
     /**
-     * 保存裁切后的壁纸
-     * @param imageBytes 图片字节数组
-     * @param isDark true 代表写入深色模式壁纸，false 代表写入浅色模式壁纸
+     * 保存裁切后的壁纸，自动维护最近三张历史并清理超出容量的孤儿文件。
      */
     fun saveCroppedWallpaper(imageBytes: ByteArray, isDark: Boolean) = viewModelScope.launch(Dispatchers.IO) {
         try {
             val appSettings = appSettingsRepository.getAppSettingsOnce()
-            val currentPath = if (isDark) appSettings.backgroundImagePath.dark else appSettings.backgroundImagePath.light
 
-            if (currentPath.isNotEmpty()) {
-                val oldPath = currentPath.toPath()
-                if (fileSystem.exists(oldPath)) {
-                    fileSystem.delete(oldPath)
-                }
-            }
-
-            val prefix = if (isDark) "wallpaper_dark_" else "wallpaper_light_"
+            val prefix = if (appSettings.wallpaperFollowDarkMode && isDark) "wallpaper_dark_" else "wallpaper_light_"
             val newFileName = "$prefix${Uuid.random()}.jpg"
             val newFile = filesDir / newFileName
 
             fileSystem.write(newFile) {
                 write(imageBytes)
             }
+            val newPathStr = newFile.toString()
 
-            // 精准更新对应的背景路径字段
-            val newBgPath = if (isDark) {
-                appSettings.backgroundImagePath.copy(dark = newFile.toString())
+            val newBgPath = if (appSettings.wallpaperFollowDarkMode) {
+                if (isDark) {
+                    appSettings.backgroundImagePath.copy(dark = newPathStr)
+                } else {
+                    appSettings.backgroundImagePath.copy(light = newPathStr)
+                }
             } else {
-                appSettings.backgroundImagePath.copy(light = newFile.toString())
+                // 固定背景模式：浅色与深色同步指向新壁纸
+                appSettings.backgroundImagePath.copy(light = newPathStr, dark = newPathStr)
             }
-            appSettingsRepository.insertOrUpdateAppSettings(appSettings.copy(backgroundImagePath = newBgPath))
+
+            val updatedRecents = (
+                listOf(newPathStr) +
+                    appSettings.recentWallpapers +
+                    listOf(appSettings.backgroundImagePath.light, appSettings.backgroundImagePath.dark)
+                ).filter { it.isNotBlank() }.distinct()
+            val keptRecents = updatedRecents.take(3)
+            val protectedPaths = (keptRecents + listOf(newBgPath.light, newBgPath.dark)).toSet()
+
+            updatedRecents.drop(3).forEach { stale ->
+                if (stale !in protectedPaths) {
+                    runCatching {
+                        val p = stale.toPath()
+                        if (fileSystem.exists(p)) fileSystem.delete(p)
+                    }
+                }
+            }
+
+            // 首次设置壁纸且用户从未手动调过卡片透明度时，默认切至 0.76f 果冻通透档
+            val curStyle = styleRepository.getStyleOnce()
+            if (!curStyle.hasCustomAlpha && curStyle.courseBlockAlphaFloat >= 0.98f) {
+                styleRepository.setCourseBlockAlpha(0.76f)
+            }
+
+            appSettingsRepository.insertOrUpdateAppSettings(
+                appSettings.copy(
+                    backgroundImagePath = newBgPath,
+                    recentWallpapers = keptRecents
+                )
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     /**
-     * 移除指定模式下的壁纸（深色或浅色独立清除）
+     * 从「最近选择的背景」缩略图直接切换壁纸（无需重复裁剪）
+     */
+    fun applyRecentWallpaper(pathStr: String, isDarkTarget: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        val valid = appSettingsRepository.resolveValidWallpaperFile(pathStr) ?: return@launch
+        val appSettings = appSettingsRepository.getAppSettingsOnce()
+        val newBgPath = if (appSettings.wallpaperFollowDarkMode) {
+            if (isDarkTarget) {
+                appSettings.backgroundImagePath.copy(dark = valid)
+            } else {
+                appSettings.backgroundImagePath.copy(light = valid)
+            }
+        } else {
+            appSettings.backgroundImagePath.copy(light = valid, dark = valid)
+        }
+        val keptRecents = (listOf(valid) + appSettings.recentWallpapers).filter { it.isNotBlank() }.distinct().take(3)
+        appSettingsRepository.insertOrUpdateAppSettings(
+            appSettings.copy(
+                backgroundImagePath = newBgPath,
+                recentWallpapers = keptRecents
+            )
+        )
+    }
+
+    fun updateWallpaperFollowDarkMode(followDark: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        val appSettings = appSettingsRepository.getAppSettingsOnce()
+        val syncedBg = if (!followDark) {
+            val primary = appSettings.backgroundImagePath.light.ifEmpty { appSettings.backgroundImagePath.dark }
+            appSettings.backgroundImagePath.copy(light = primary, dark = primary)
+        } else {
+            appSettings.backgroundImagePath
+        }
+        appSettingsRepository.insertOrUpdateAppSettings(
+            appSettings.copy(
+                wallpaperFollowDarkMode = followDark,
+                backgroundImagePath = syncedBg
+            )
+        )
+    }
+
+    fun updateWallpaperBlur(blurDp: Float) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(blurDp = blurDp)
+    }
+
+    fun updateWallpaperDim(dimAlpha: Float) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(dimAlpha = dimAlpha)
+    }
+
+    fun updateWallpaperGlassEnabled(enabled: Boolean) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(glassEnabled = enabled)
+    }
+
+    fun updateWallpaperCardFrost(frost: Float) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(cardFrost = frost)
+    }
+
+    /**
+     * 恢复当前模式默认纯色背景（保留最近三张相册历史以便随时找回）
      */
     fun removeWallpaper(isDark: Boolean) = viewModelScope.launch(Dispatchers.IO) {
         try {
             val appSettings = appSettingsRepository.getAppSettingsOnce()
-
-            val targetPathStr = if (isDark) appSettings.backgroundImagePath.dark else appSettings.backgroundImagePath.light
-            val otherPathStr = if (isDark) appSettings.backgroundImagePath.light else appSettings.backgroundImagePath.dark
-
-            if (targetPathStr.isNotEmpty()) {
-                val isSharedWithOther = targetPathStr == otherPathStr
-
-                if (!isSharedWithOther) {
-                    val path = targetPathStr.toPath()
-                    if (fileSystem.exists(path)) {
-                        fileSystem.delete(path)
-                    }
+            val newBgPath = if (appSettings.wallpaperFollowDarkMode) {
+                if (isDark) {
+                    appSettings.backgroundImagePath.copy(dark = "")
+                } else {
+                    appSettings.backgroundImagePath.copy(light = "")
                 }
-            }
-
-            // 精准清空对应模式的路径
-            val newBgPath = if (isDark) {
-                appSettings.backgroundImagePath.copy(dark = "")
             } else {
-                appSettings.backgroundImagePath.copy(light = "")
+                appSettings.backgroundImagePath.copy(light = "", dark = "")
             }
             appSettingsRepository.insertOrUpdateAppSettings(appSettings.copy(backgroundImagePath = newBgPath))
         } catch (e: Exception) {

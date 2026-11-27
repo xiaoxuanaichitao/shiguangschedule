@@ -57,6 +57,7 @@ import com.xingheyuzhuan.shiguangschedule.tool.rememberFileManager
 import com.xingheyuzhuan.shiguangschedule.ui.components.AdvancedColorPicker
 import com.xingheyuzhuan.shiguangschedule.ui.components.ColorPickerConfig
 import com.xingheyuzhuan.shiguangschedule.ui.components.ImageCropper
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import com.xingheyuzhuan.shiguangschedule.ui.theme.rememberColorScheme
 import org.jetbrains.compose.resources.stringResource
@@ -86,6 +87,7 @@ fun StyleSettingsScreen(
     val demoUiState by viewModel.demoUiState.collectAsStateWithLifecycle()
     val isPreviewDark by viewModel.isPreviewDark.collectAsStateWithLifecycle()
     val wallpaperPath by viewModel.wallpaperPathState.collectAsStateWithLifecycle()
+    val recentWallpapers by viewModel.recentWallpapersState.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettingsState.collectAsStateWithLifecycle()
 
     val containerSize = LocalWindowInfo.current.containerSize
@@ -190,7 +192,13 @@ fun StyleSettingsScreen(
                                     ScheduleGridContent(
                                         style = currentStyle,
                                         demoUiState = demoUiState,
-                                        wallpaperPath = wallpaperPath
+                                        wallpaperVisuals = WallpaperVisualConfig(
+                                            wallpaperPath = wallpaperPath,
+                                            blurDp = currentAppSettings.wallpaperBlurDp,
+                                            dimAlpha = currentAppSettings.wallpaperDimAlpha,
+                                            glassEnabled = currentAppSettings.wallpaperGlassEnabled,
+                                            cardFrost = currentAppSettings.wallpaperCardFrost
+                                        )
                                     )
                                 }
                             }
@@ -229,6 +237,8 @@ fun StyleSettingsScreen(
                     ) {
                         SettingsListContent(
                             currentStyle = currentStyle,
+                            appSettings = currentAppSettings,
+                            recentWallpapers = recentWallpapers,
                             viewModel = viewModel,
                             isPreviewDark = isPreviewDark,
                             wallpaperPath = wallpaperPath,
@@ -263,6 +273,8 @@ fun StyleSettingsScreen(
                     ) {
                         SettingsListContent(
                             currentStyle = currentStyle,
+                            appSettings = currentAppSettings,
+                            recentWallpapers = recentWallpapers,
                             viewModel = viewModel,
                             isPreviewDark = isPreviewDark,
                             wallpaperPath = wallpaperPath,

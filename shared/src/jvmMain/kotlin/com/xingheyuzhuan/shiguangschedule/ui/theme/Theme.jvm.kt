@@ -30,4 +30,12 @@ actual fun SetupPlatformThemeEffects(
     // 如要实现自绘边框需要补充实现
 }
 
+@Composable
+actual fun SyncImmersiveStatusBarIcons(
+    forceLightContent: Boolean,
+    darkTheme: Boolean
+) {
+    // Desktop 端无移动端状态栏
+}
+
 actual val supportsDynamicColor: Boolean = false

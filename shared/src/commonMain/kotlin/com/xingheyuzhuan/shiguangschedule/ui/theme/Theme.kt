@@ -137,6 +137,15 @@ expect fun SetupPlatformThemeEffects(
 )
 
 /**
+ * 沉浸式自定义壁纸页面状态栏白色图标联动（浅色模式下进入带暗角的壁纸页自动切为白色状态栏文字，离开时恢复）
+ */
+@Composable
+expect fun SyncImmersiveStatusBarIcons(
+    forceLightContent: Boolean,
+    darkTheme: Boolean
+)
+
+/**
  * 平台特定的能力：当前系统/平台是否支持 Dynamic Color (动态取色)
  */
 expect val supportsDynamicColor: Boolean

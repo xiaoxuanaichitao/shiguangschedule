@@ -13,7 +13,9 @@ import com.xingheyuzhuan.shiguangschedule.data.repository.AppSettingsRepository
 import com.xingheyuzhuan.shiguangschedule.data.repository.CourseTableRepository
 import com.xingheyuzhuan.shiguangschedule.data.repository.StyleSettingsRepository
 import com.xingheyuzhuan.shiguangschedule.data.repository.TimeScheduleRepository
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -43,6 +45,26 @@ class TodayScheduleViewModel(
         private const val DEFAULT_SEMESTER_TOTAL_WEEKS = 20
         private const val MAX_TIME_SORT_KEY = "99:99"
     }
+
+    private val _isDarkTheme = MutableStateFlow(false)
+
+    fun updateDarkTheme(isDark: Boolean) {
+        _isDarkTheme.value = isDark
+    }
+
+    val wallpaperVisuals: StateFlow<WallpaperVisualConfig> = combine(
+        appSettingsRepository.getAppSettings(),
+        _isDarkTheme
+    ) { settings, isDark ->
+        val path = appSettingsRepository.getActiveWallpaperPath(isDark)
+        WallpaperVisualConfig(
+            wallpaperPath = path,
+            blurDp = settings.wallpaperBlurDp,
+            dimAlpha = settings.wallpaperDimAlpha,
+            glassEnabled = settings.wallpaperGlassEnabled,
+            cardFrost = settings.wallpaperCardFrost
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WallpaperVisualConfig())
 
     val gridStyle: StateFlow<ScheduleGridStyle> = styleSettingsRepository.styleFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScheduleGridStyle())

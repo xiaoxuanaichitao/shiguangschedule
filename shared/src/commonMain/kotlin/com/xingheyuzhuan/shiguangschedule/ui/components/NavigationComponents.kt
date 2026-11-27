@@ -66,6 +66,7 @@ import shiguangschedule.shared.generated.resources.Res
 import shiguangschedule.shared.generated.resources.account_circle_24px
 import shiguangschedule.shared.generated.resources.account_circle_filled_24px
 import shiguangschedule.shared.generated.resources.explore_24px
+import shiguangschedule.shared.generated.resources.explore_outlined_24px
 import shiguangschedule.shared.generated.resources.nav_course_schedule
 import shiguangschedule.shared.generated.resources.nav_settings
 import shiguangschedule.shared.generated.resources.nav_today_schedule
@@ -93,6 +94,7 @@ fun AdaptiveNavigationScaffold(
     showNavigation: Boolean = true,
     navHideFractionProvider: () -> Float = { 0f },
     isTransparent: Boolean = false,
+    isFrostedGlass: Boolean = false,
     navigationModifier: Modifier = Modifier,
     content: @Composable (PaddingValues) -> Unit
 ) {
@@ -105,7 +107,8 @@ fun AdaptiveNavigationScaffold(
     val todayUnselectedIcon = vectorResource(Res.drawable.view_agenda_24px)
     val courseSelectedIcon = vectorResource(Res.drawable.view_week_filled_24px)
     val courseUnselectedIcon = vectorResource(Res.drawable.view_week_24px)
-    val campusIcon = vectorResource(Res.drawable.explore_24px)
+    val campusSelectedIcon = vectorResource(Res.drawable.explore_24px)
+    val campusUnselectedIcon = vectorResource(Res.drawable.explore_outlined_24px)
     val settingsSelectedIcon = vectorResource(Res.drawable.account_circle_filled_24px)
     val settingsUnselectedIcon = vectorResource(Res.drawable.account_circle_24px)
 
@@ -113,7 +116,7 @@ fun AdaptiveNavigationScaffold(
         todayLabel, courseLabel, campusLabel, settingsLabel,
         todaySelectedIcon, todayUnselectedIcon,
         courseSelectedIcon, courseUnselectedIcon,
-        campusIcon,
+        campusSelectedIcon, campusUnselectedIcon,
         settingsSelectedIcon, settingsUnselectedIcon
     ) {
         listOf(
@@ -132,8 +135,8 @@ fun AdaptiveNavigationScaffold(
             NavItemData(
                 label = campusLabel,
                 destination = Destination.CampusDiscover,
-                selectedIcon = campusIcon,
-                unselectedIcon = campusIcon
+                selectedIcon = campusSelectedIcon,
+                unselectedIcon = campusUnselectedIcon
             ),
             NavItemData(
                 label = settingsLabel,
@@ -215,18 +218,27 @@ fun AdaptiveNavigationScaffold(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = if (isTransparent) Color.Transparent else NavigationBarDefaults.containerColor,
-                                shadowElevation = if (isTransparent) 0.dp else 6.dp,
-                                tonalElevation = 3.dp,
-                                border = if (isTransparent) null else BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                                )
+                                color = when {
+                                    isTransparent -> Color.Transparent
+                                    isFrostedGlass -> Color(0xFF141820).copy(alpha = 0.50f)
+                                    else -> NavigationBarDefaults.containerColor
+                                },
+                                shadowElevation = if (isTransparent || isFrostedGlass) 0.dp else 6.dp,
+                                tonalElevation = if (isFrostedGlass) 0.dp else 3.dp,
+                                border = when {
+                                    isTransparent -> null
+                                    isFrostedGlass -> BorderStroke(0.9.dp, Color.White.copy(alpha = 0.34f))
+                                    else -> BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    )
+                                }
                             ) {
                                 FixedWidthNavBarContainer(
                                     navItems = navItems,
                                     currentDestination = currentDestination,
                                     onTabSelected = onTabSelected,
+                                    isFrostedGlass = isFrostedGlass,
                                     minSpacing = 4.dp,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
                                 )
@@ -252,6 +264,7 @@ private fun FixedWidthNavBarContainer(
     currentDestination: Destination,
     onTabSelected: (Destination) -> Unit,
     modifier: Modifier = Modifier,
+    isFrostedGlass: Boolean = false,
     minSpacing: Dp = 8.dp
 ) {
     SubcomposeLayout(modifier = modifier) { constraints ->
@@ -260,13 +273,13 @@ private fun FixedWidthNavBarContainer(
         // 测量各 Tab 处于未选中和选中状态时的宽度
         val unselectedWidths = navItems.mapIndexed { index, item ->
             subcompose("measure_unselected_$index") {
-                TabContent(item = item, isSelected = false, textAlpha = 0f)
+                TabContent(item = item, isSelected = false, textAlpha = 0f, isFrostedGlass = isFrostedGlass)
             }.first().measure(constraints).width
         }
 
         val selectedWidths = navItems.mapIndexed { index, item ->
             subcompose("measure_selected_$index") {
-                TabContent(item = item, isSelected = true, textAlpha = 1f)
+                TabContent(item = item, isSelected = true, textAlpha = 1f, isFrostedGlass = isFrostedGlass)
             }.first().measure(constraints).width
         }
 
@@ -292,6 +305,7 @@ private fun FixedWidthNavBarContainer(
                         isSelected = isSelected,
                         collapsedWidth = with(this@SubcomposeLayout) { unselectedWidths[index].toDp() },
                         expandedWidth = with(this@SubcomposeLayout) { selectedWidths[index].toDp() },
+                        isFrostedGlass = isFrostedGlass,
                         onSelect = { onTabSelected(item.destination) }
                     )
                 }
@@ -325,6 +339,7 @@ private fun AnimatedTabItem(
     isSelected: Boolean,
     collapsedWidth: Dp,
     expandedWidth: Dp,
+    isFrostedGlass: Boolean = false,
     onSelect: () -> Unit
 ) {
     val animatedWidth by animateDpAsState(
@@ -345,7 +360,11 @@ private fun AnimatedTabItem(
         if (isSelected) 1f else 0f
     }
 
-    val pillBgColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+    val pillBgColor = when {
+        !isSelected -> Color.Transparent
+        isFrostedGlass -> Color.White.copy(alpha = 0.22f)
+        else -> MaterialTheme.colorScheme.secondaryContainer
+    }
 
     Box(
         modifier = Modifier
@@ -362,7 +381,8 @@ private fun AnimatedTabItem(
         TabContent(
             item = item,
             isSelected = isSelected,
-            textAlpha = progress
+            textAlpha = progress,
+            isFrostedGlass = isFrostedGlass
         )
     }
 }
@@ -374,12 +394,14 @@ private fun AnimatedTabItem(
 private fun TabContent(
     item: NavItemData,
     isSelected: Boolean,
-    textAlpha: Float
+    textAlpha: Float,
+    isFrostedGlass: Boolean = false
 ) {
-    val contentColor = if (isSelected) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+    val contentColor = when {
+        isFrostedGlass && isSelected -> Color.White
+        isFrostedGlass -> Color.White.copy(alpha = 0.78f)
+        isSelected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Row(

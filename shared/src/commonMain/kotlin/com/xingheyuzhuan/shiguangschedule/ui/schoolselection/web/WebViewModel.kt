@@ -58,18 +58,23 @@ class WebViewModel(
     ) {
         viewModelScope.launch {
             val result = runCatching {
+                var extractedStudentName: String? = null
                 val (courses, suggestedDate) = if (isYjs) {
                     CumtParsers.parseYjsCourseHtml(html) to null
                 } else {
                     val jsonRes = bkCourseJson?.takeIf { it.isNotBlank() }?.let { rawJson ->
                         CumtParsers.parseBkCourseJson(rawJson, fallbackXnm, fallbackXqm)
                     }
+                    val htmlResFallback by lazy { CumtParsers.parseBkCourseHtml(html) }
+                    extractedStudentName = jsonRes?.studentName ?: htmlResFallback.studentName
                     if (jsonRes != null && jsonRes.courses.isNotEmpty()) {
                         jsonRes.courses to (jsonRes.suggestedTermStartDate ?: CumtParsers.parseSuggestedTermStartDate(html))
                     } else {
-                        val htmlRes = CumtParsers.parseBkCourseHtml(html)
-                        htmlRes.courses to (htmlRes.suggestedTermStartDate ?: jsonRes?.suggestedTermStartDate)
+                        htmlResFallback.courses to (htmlResFallback.suggestedTermStartDate ?: jsonRes?.suggestedTermStartDate)
                     }
+                }
+                if (!extractedStudentName.isNullOrBlank()) {
+                    cumtLocalRepository.updateProfileNameIfBlank(extractedStudentName)
                 }
                 if (courses.isEmpty()) {
                     error("当前页面未检测到课表数据，请确认已查询并显示课表后再试")

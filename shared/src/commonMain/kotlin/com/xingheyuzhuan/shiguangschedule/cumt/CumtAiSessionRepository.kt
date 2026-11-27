@@ -3,8 +3,10 @@ package com.xingheyuzhuan.shiguangschedule.cumt
 import androidx.compose.ui.graphics.ImageBitmap
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
 import com.xingheyuzhuan.shiguangschedule.ui.components.encodeImageBitmapForAi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +21,7 @@ import kotlin.uuid.Uuid
 
 /**
  * 全局共享的 AI 助手会话中心。
- * 让 Notion 风格悬浮小球、半屏灵动抽屉、全屏 AI 助手页实时共享同一份对话流、模型列表与待确认操作。
+ * 支持跨重启会话持久化、手动停止生成、课表冲突提示与一键撤回已导入课程。
  */
 @OptIn(ExperimentalUuidApi::class)
 @Single
@@ -29,6 +31,7 @@ class CumtAiSessionRepository(
     private val toolEngine: ScheduleToolEngine
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var activeTurnJob: Job? = null
 
     private val _messages = MutableStateFlow<List<CumtAiChatMessage>>(emptyList())
     val messages: StateFlow<List<CumtAiChatMessage>> = _messages.asStateFlow()
@@ -48,6 +51,22 @@ class CumtAiSessionRepository(
     private val _modelFetchNotice = MutableStateFlow<String?>(null)
     val modelFetchNotice: StateFlow<String?> = _modelFetchNotice.asStateFlow()
 
+    init {
+        scope.launch {
+            val saved = localRepo.loadSavedChatHistory()
+            if (saved.isNotEmpty() && _messages.value.isEmpty()) {
+                _messages.value = saved
+            }
+        }
+    }
+
+    private fun persistCurrentMessages() {
+        val snapshot = _messages.value
+        scope.launch {
+            localRepo.saveChatHistory(snapshot)
+        }
+    }
+
     fun setQuickSheetOpen(open: Boolean) {
         _isQuickSheetOpen.value = open
         if (open) _hasUnreadReply.value = false
@@ -58,14 +77,36 @@ class CumtAiSessionRepository(
     }
 
     fun clearConversation() {
+        activeTurnJob?.cancel()
+        activeTurnJob = null
+        _isBusy.value = false
         _messages.value = emptyList()
         _hasUnreadReply.value = false
+        persistCurrentMessages()
+    }
+
+    fun cancelCurrentTurn() {
+        val job = activeTurnJob
+        if (job != null && job.isActive) {
+            job.cancel()
+            activeTurnJob = null
+            _isBusy.value = false
+            val stopMsg = CumtAiChatMessage(
+                id = "s_${Uuid.random().toString().take(8)}",
+                role = "assistant",
+                text = "已手动停止本次回复。",
+                timestampMillis = Clock.System.now().toEpochMilliseconds()
+            )
+            _messages.update { it + stopMsg }
+            persistCurrentMessages()
+        }
     }
 
     fun refreshAvailableModels(
         protocol: CumtAiProtocol,
         baseUrl: String,
         apiKey: String,
+        providerIdOverride: String? = null,
         onModelsLoaded: (List<CumtAiModelInfo>) -> Unit = {}
     ) {
         if (_isFetchingModels.value) return
@@ -74,7 +115,7 @@ class CumtAiSessionRepository(
             _modelFetchNotice.value = null
             aiService.fetchAvailableModels(protocol, baseUrl, apiKey).fold(
                 onSuccess = { models ->
-                    localRepo.saveCachedAiModels(models)
+                    localRepo.saveCachedAiModels(models, providerIdOverride)
                     val visionCount = models.count { it.supportsVision }
                     _modelFetchNotice.value = "已自动识别 ${models.size} 个可用模型（含 $visionCount 个视觉模型）"
                     onModelsLoaded(models)
@@ -96,11 +137,11 @@ class CumtAiSessionRepository(
         val cleanText = text.trim()
         if (cleanText.isEmpty() && image == null) return
         if (_isBusy.value) {
-            ToastManager.show("AI 正在回复上一条消息，请稍候")
+            ToastManager.show("AI 正在回复，可点击右侧停止按钮中断")
             return
         }
 
-        scope.launch {
+        activeTurnJob = scope.launch {
             val config = localRepo.aiConfigFlow.first()
             val apiKey = localRepo.getSavedAiApiKey()
             if (apiKey.isBlank()) {
@@ -119,6 +160,7 @@ class CumtAiSessionRepository(
                 timestampMillis = Clock.System.now().toEpochMilliseconds()
             )
             _messages.update { it + userMsg }
+            persistCurrentMessages()
             _isBusy.value = true
 
             try {
@@ -143,11 +185,13 @@ class CumtAiSessionRepository(
                             timestampMillis = Clock.System.now().toEpochMilliseconds()
                         )
                         _messages.update { it + assistantMsg }
+                        persistCurrentMessages()
                         if (!_isQuickSheetOpen.value) {
                             _hasUnreadReply.value = true
                         }
                     },
                     onFailure = { err ->
+                        if (err is CancellationException) throw err
                         val errMsg = CumtAiChatMessage(
                             id = "e_${Uuid.random().toString().take(8)}",
                             role = "assistant",
@@ -156,8 +200,11 @@ class CumtAiSessionRepository(
                             timestampMillis = Clock.System.now().toEpochMilliseconds()
                         )
                         _messages.update { it + errMsg }
+                        persistCurrentMessages()
                     }
                 )
+            } catch (ce: CancellationException) {
+                throw ce
             } catch (e: Exception) {
                 val errMsg = CumtAiChatMessage(
                     id = "e_${Uuid.random().toString().take(8)}",
@@ -167,8 +214,10 @@ class CumtAiSessionRepository(
                     timestampMillis = Clock.System.now().toEpochMilliseconds()
                 )
                 _messages.update { it + errMsg }
+                persistCurrentMessages()
             } finally {
                 _isBusy.value = false
+                activeTurnJob = null
             }
         }
     }
@@ -187,9 +236,36 @@ class CumtAiSessionRepository(
                 messageId = messageId,
                 actionId = actionId,
                 status = if (result.success) CumtAiActionStatus.APPLIED else CumtAiActionStatus.FAILED,
-                resultMessage = result.summary
+                resultMessage = result.summary,
+                createdCourseIds = result.createdCourseIds
             )
             ToastManager.show(result.summary)
+        }
+    }
+
+    fun undoAppliedAction(messageId: String, actionId: String) {
+        scope.launch {
+            val targetAction = _messages.value
+                .firstOrNull { it.id == messageId }
+                ?.pendingActions
+                ?.firstOrNull { it.id == actionId }
+                ?: return@launch
+            if (targetAction.status != CumtAiActionStatus.APPLIED || targetAction.createdCourseIds.isEmpty()) {
+                return@launch
+            }
+            val ok = toolEngine.undoCreatedCourses(targetAction.createdCourseIds)
+            if (ok) {
+                updateActionState(
+                    messageId = messageId,
+                    actionId = actionId,
+                    status = CumtAiActionStatus.UNDONE,
+                    resultMessage = "已撤回本次导入的 ${targetAction.createdCourseIds.size} 条课程",
+                    createdCourseIds = emptyList()
+                )
+                ToastManager.show("已撤回导入")
+            } else {
+                ToastManager.show("撤回失败")
+            }
         }
     }
 
@@ -217,7 +293,8 @@ class CumtAiSessionRepository(
                     messageId = messageId,
                     actionId = action.id,
                     status = if (result.success) CumtAiActionStatus.APPLIED else CumtAiActionStatus.FAILED,
-                    resultMessage = result.summary
+                    resultMessage = result.summary,
+                    createdCourseIds = result.createdCourseIds
                 )
             }
             if (appliedCount > 0) {
@@ -230,7 +307,8 @@ class CumtAiSessionRepository(
         messageId: String,
         actionId: String,
         status: CumtAiActionStatus,
-        resultMessage: String
+        resultMessage: String,
+        createdCourseIds: List<String>? = null
     ) {
         _messages.update { list ->
             list.map { msg ->
@@ -238,10 +316,15 @@ class CumtAiSessionRepository(
                 else msg.copy(
                     pendingActions = msg.pendingActions.map { act ->
                         if (act.id != actionId) act
-                        else act.copy(status = status, resultMessage = resultMessage)
+                        else act.copy(
+                            status = status,
+                            resultMessage = resultMessage,
+                            createdCourseIds = createdCourseIds ?: act.createdCourseIds
+                        )
                     }
                 )
             }
         }
+        persistCurrentMessages()
     }
 }

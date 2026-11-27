@@ -120,25 +120,27 @@ class AppSettingsRepository(
 
         val appSettings = getAppSettingsOnce()
 
-        val pathSetting = if (isDarkTheme) {
-            appSettings.backgroundImagePath.dark
+        val pathSetting = if (appSettings.wallpaperFollowDarkMode) {
+            if (isDarkTheme) appSettings.backgroundImagePath.dark else appSettings.backgroundImagePath.light
         } else {
-            appSettings.backgroundImagePath.light
+            // 固定背景模式：深浅色共用同一张背景图（优先取 light，兼容旧数据回退 dark）
+            appSettings.backgroundImagePath.light.ifEmpty { appSettings.backgroundImagePath.dark }
         }
 
-        val rawPath = pathSetting.takeIf { it.isNotEmpty() } ?: return null
+        return resolveValidWallpaperFile(pathSetting)
+    }
 
+    fun resolveValidWallpaperFile(rawPathStr: String?): String? {
+        val rawPath = rawPathStr?.takeIf { it.isNotBlank() } ?: return null
         try {
             val path = rawPath.toPath()
             val absolutePath = if (path.isAbsolute) path else filesDir.resolve(path)
-
             if (fileSystem.exists(absolutePath)) {
                 return absolutePath.toString()
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-
         return null
     }
 
@@ -174,6 +176,22 @@ class AppSettingsRepository(
         }
     }
 
+    suspend fun updateWallpaperVisuals(
+        followDarkMode: Boolean? = null,
+        blurDp: Float? = null,
+        dimAlpha: Float? = null,
+        glassEnabled: Boolean? = null,
+        cardFrost: Float? = null
+    ) {
+        dataStore.edit { prefs ->
+            followDarkMode?.let { prefs[AppSettingsModel.KEY_WALLPAPER_FOLLOW_DARK_MODE] = it }
+            blurDp?.let { prefs[AppSettingsModel.KEY_WALLPAPER_BLUR_DP] = it.coerceIn(0f, 28f) }
+            dimAlpha?.let { prefs[AppSettingsModel.KEY_WALLPAPER_DIM_ALPHA] = it.coerceIn(0f, 0.55f) }
+            glassEnabled?.let { prefs[AppSettingsModel.KEY_WALLPAPER_GLASS_ENABLED] = it }
+            cardFrost?.let { prefs[AppSettingsModel.KEY_WALLPAPER_CARD_FROST] = it.coerceIn(0f, 0.85f) }
+        }
+    }
+
     /**
      * 更新应用设置。
      * 将对象解构并原子化地写入 DataStore。
@@ -195,6 +213,14 @@ class AppSettingsRepository(
             prefs[AppSettingsModel.KEY_CUSTOM_DARK_PRIMARY] = newSettings.customPrimaryColor.dark
             prefs[AppSettingsModel.KEY_BACKGROUND_IMAGE_PATH_LIGHT] = newSettings.backgroundImagePath.light
             prefs[AppSettingsModel.KEY_BACKGROUND_IMAGE_PATH_DARK] = newSettings.backgroundImagePath.dark
+            prefs[AppSettingsModel.KEY_WALLPAPER_FOLLOW_DARK_MODE] = newSettings.wallpaperFollowDarkMode
+            prefs[AppSettingsModel.KEY_WALLPAPER_BLUR_DP] = newSettings.wallpaperBlurDp.coerceIn(0f, 28f)
+            prefs[AppSettingsModel.KEY_WALLPAPER_DIM_ALPHA] = newSettings.wallpaperDimAlpha.coerceIn(0f, 0.55f)
+            prefs[AppSettingsModel.KEY_WALLPAPER_GLASS_ENABLED] = newSettings.wallpaperGlassEnabled
+            prefs[AppSettingsModel.KEY_WALLPAPER_CARD_FROST] = newSettings.wallpaperCardFrost.coerceIn(0f, 0.85f)
+            prefs[AppSettingsModel.KEY_RECENT_WALLPAPERS_JSON] = Json.encodeToString(
+                newSettings.recentWallpapers.filter { it.isNotBlank() }.distinct().take(3)
+            )
             prefs[AppSettingsModel.KEY_DEVELOPER_MODE_ENABLED] = newSettings.developerModeEnabled
             prefs[AppSettingsModel.KEY_APP_UI_FONT_SCALE] = newSettings.appUiFontScale.coerceIn(0.85f, 1.25f)
         }

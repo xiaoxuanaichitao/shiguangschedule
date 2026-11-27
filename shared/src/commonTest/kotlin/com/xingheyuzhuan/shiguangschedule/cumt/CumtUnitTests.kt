@@ -920,4 +920,58 @@ class CumtUnitTests {
         assertEquals(CumtAiOrbIconStyle.MASCOT, CumtAiOrbIconStyle.fromId("mascot"))
         assertEquals(CumtAiOrbIconStyle.CUSTOM, CumtAiOrbIconStyle.fromId("custom"))
     }
+
+    @Test
+    fun studentNameExtractionAndPrivacyMaskingWorkCorrectly() {
+        assertEquals("08****34", CumtParsers.maskStudentId("08231234"))
+        assertEquals("****", CumtParsers.maskStudentId("123"))
+
+        val bkJson = """
+            {
+              "xsxx": { "XM": "李亚澎", "XNMC": "2026-2027", "XQM": "3" },
+              "kbList": [
+                {
+                  "kcmc": "数据结构",
+                  "xqj": "1",
+                  "jcs": "1-2",
+                  "zcd": "1-16周",
+                  "xm": "张老师",
+                  "cdmc": "博1-A101"
+                }
+              ]
+            }
+        """.trimIndent()
+        val parsedJson = CumtParsers.parseBkCourseJson(bkJson)
+        assertEquals("李亚澎", parsedJson.studentName)
+        assertEquals(1, parsedJson.courses.size)
+
+        val bkHtml = """<div><h6>李亚澎的课表</h6></div><table id="kbgrid_table_0"></table>"""
+        val parsedHtml = CumtParsers.parseBkCourseHtml(bkHtml)
+        assertEquals("李亚澎", parsedHtml.studentName)
+    }
+
+    @Test
+    fun formatCourseLocationCompactSplitsCampusAndRoomCleanly() {
+        assertEquals(
+            "南湖校区\n博2-B402",
+            com.xingheyuzhuan.shiguangschedule.ui.schedule.components.formatCourseLocationCompact(
+                "南湖校区博2-B402",
+                removeLocationAt = true
+            )
+        )
+        assertEquals(
+            "@文昌校区\n教1-203",
+            com.xingheyuzhuan.shiguangschedule.ui.schedule.components.formatCourseLocationCompact(
+                "@文昌校区 教1-203",
+                removeLocationAt = false
+            )
+        )
+        assertEquals(
+            "信控-A205",
+            com.xingheyuzhuan.shiguangschedule.ui.schedule.components.formatCourseLocationCompact(
+                "@信控-A205",
+                removeLocationAt = true
+            )
+        )
+    }
 }

@@ -661,13 +661,17 @@ fun CampusDiscoverScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 CumtStatusPill(
-                                    text = if (aiConfig.hasApiKey) "已就绪" else "去配置",
-                                    containerColor = if (aiConfig.hasApiKey) {
+                                    text = when {
+                                        aiConfig.isKeylessProxy && aiConfig.isReadyToChat -> "免费体验"
+                                        aiConfig.isReadyToChat -> "已就绪"
+                                        else -> "去配置"
+                                    },
+                                    containerColor = if (aiConfig.isReadyToChat) {
                                         CumtAccent.EMERALD.containerColor()
                                     } else {
                                         CumtAccent.SLATE.containerColor()
                                     },
-                                    contentColor = if (aiConfig.hasApiKey) {
+                                    contentColor = if (aiConfig.isReadyToChat) {
                                         CumtAccent.EMERALD.contentColor()
                                     } else {
                                         CumtAccent.SLATE.contentColor()

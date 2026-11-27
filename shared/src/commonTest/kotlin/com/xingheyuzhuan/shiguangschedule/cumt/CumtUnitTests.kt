@@ -976,4 +976,36 @@ class CumtUnitTests {
         assertEquals(CumtAiProviderPreset.DEEPSEEK, CumtAiProviderPreset.fromId(null))
         assertEquals("DeepSeek", CumtAiConfig().effectiveDisplayName)
     }
+
+    @Test
+    fun freeProxyAiConfigAllowsKeylessModeAndAutoVisionInference() {
+        assertEquals(CumtAiProviderPreset.FREE_PROXY, CumtAiProviderPreset.fromId("free_proxy"))
+        assertTrue(!CumtAiProviderPreset.FREE_PROXY.requiresApiKey)
+        assertTrue(CumtAiProviderPreset.DEEPSEEK.requiresApiKey)
+
+        val emptyFreeCfg = CumtAiConfig(
+            providerId = CumtAiProviderPreset.FREE_PROXY.id,
+            baseUrl = "",
+            model = "cumt-free-auto",
+            hasApiKey = false
+        )
+        assertTrue(emptyFreeCfg.isKeylessProxy)
+        assertTrue(!emptyFreeCfg.isReadyToChat)
+
+        val activeFreeCfg = emptyFreeCfg.copy(baseUrl = "https://demo.workers.dev/v1")
+        assertTrue(activeFreeCfg.isKeylessProxy)
+        assertTrue(activeFreeCfg.isReadyToChat)
+
+        val deepseekWithoutKey = CumtAiConfig(
+            providerId = CumtAiProviderPreset.DEEPSEEK.id,
+            baseUrl = "https://api.deepseek.com/v1",
+            hasApiKey = false
+        )
+        assertTrue(!deepseekWithoutKey.isKeylessProxy)
+        assertTrue(!deepseekWithoutKey.isReadyToChat)
+
+        val autoModel = CumtAiCourseService.inferModelInfo("cumt-free-auto")
+        assertTrue(autoModel.supportsVision)
+        assertTrue(autoModel.supportsTools)
+    }
 }

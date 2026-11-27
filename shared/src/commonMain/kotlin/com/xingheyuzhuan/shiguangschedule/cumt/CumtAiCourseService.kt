@@ -2,6 +2,7 @@ package com.xingheyuzhuan.shiguangschedule.cumt
 
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -36,7 +37,9 @@ import kotlin.time.Clock
 data class AssistantTurnResult(
     val replyText: String,
     val toolTrace: List<String> = emptyList(),
-    val pendingActions: List<CumtAiPendingAction> = emptyList()
+    val pendingActions: List<CumtAiPendingAction> = emptyList(),
+    val freeQuotaRemaining: Int? = null,
+    val freeQuotaLimit: Int? = null
 )
 
 private data class ParsedToolCall(
@@ -62,16 +65,34 @@ class CumtAiCourseService {
         }
     }
 
+    private fun HttpRequestBuilder.applyOpenAiAuthHeaders(
+        apiKey: String,
+        isKeylessProxy: Boolean,
+        deviceId: String
+    ) {
+        if (apiKey.isNotBlank()) {
+            header(HttpHeaders.Authorization, "Bearer $apiKey")
+        }
+        if (isKeylessProxy) {
+            header("X-Shiguang-Client", CumtConstants.FREE_AI_CLIENT_HEADER)
+            if (deviceId.isNotBlank()) {
+                header("X-Shiguang-Device-Id", deviceId)
+            }
+        }
+    }
+
     // ==================== 自动发现可用模型 ====================
 
     suspend fun fetchAvailableModels(
         protocol: CumtAiProtocol,
         baseUrl: String,
-        apiKey: String
+        apiKey: String,
+        allowEmptyKey: Boolean = false,
+        deviceId: String = ""
     ): Result<List<CumtAiModelInfo>> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
         val trimmedBase = baseUrl.trim()
-        if (trimmedKey.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先填写 API Key"))
+        if (!allowEmptyKey && trimmedKey.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先填写 API Key"))
         if (trimmedBase.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先填写 Base URL"))
 
         val client = createClient(timeoutMs = 25_000L)
@@ -80,7 +101,7 @@ class CumtAiCourseService {
                 CumtAiProtocol.OPENAI_COMPATIBLE -> {
                     val endpoint = buildOpenAiModelsEndpoint(trimmedBase)
                     val resp = client.get(endpoint) {
-                        header(HttpHeaders.Authorization, "Bearer $trimmedKey")
+                        applyOpenAiAuthHeaders(trimmedKey, allowEmptyKey, deviceId)
                     }
                     val body = resp.bodyAsText()
                     if (resp.status.value !in 200..299) {
@@ -122,14 +143,23 @@ class CumtAiCourseService {
         imageBytes: ByteArray? = null,
         mimeType: String = "image/jpeg",
         contextHint: String = "",
-        toolEngine: ScheduleToolEngine
+        toolEngine: ScheduleToolEngine,
+        deviceId: String = ""
     ): Result<AssistantTurnResult> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
         val trimmedBase = config.baseUrl.trim()
         val trimmedModel = config.model.trim()
 
-        if (trimmedKey.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先配置并保存 API Key"))
-        if (trimmedBase.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先填写 API Base URL"))
+        if (!config.isKeylessProxy && trimmedKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("请先配置并保存 API Key"))
+        }
+        if (trimmedBase.isBlank()) {
+            return@withContext Result.failure(
+                IllegalArgumentException(
+                    if (config.isKeylessProxy) "请先填写免费中转地址" else "请先填写 API Base URL"
+                )
+            )
+        }
         if (trimmedModel.isBlank()) return@withContext Result.failure(IllegalArgumentException("请先选择或填写模型名称"))
 
         val base64Image = imageBytes?.takeIf { it.isNotEmpty() }?.let { CumtAesCrypto.base64Encode(it) }
@@ -143,6 +173,7 @@ class CumtAiCourseService {
                     client = client,
                     config = config,
                     apiKey = trimmedKey,
+                    deviceId = deviceId,
                     systemPrompt = systemPrompt,
                     history = history,
                     userText = userText,
@@ -174,6 +205,7 @@ class CumtAiCourseService {
         client: HttpClient,
         config: CumtAiConfig,
         apiKey: String,
+        deviceId: String,
         systemPrompt: String,
         history: List<CumtAiChatMessage>,
         userText: String,
@@ -227,6 +259,8 @@ class CumtAiCourseService {
         val toolTrace = mutableListOf<String>()
         val pendingActions = mutableListOf<CumtAiPendingAction>()
         var useTools = true
+        var lastQuotaRemaining: Int? = null
+        var lastQuotaLimit: Int? = null
 
         repeat(4) {
             val payload = buildJsonObject {
@@ -241,9 +275,11 @@ class CumtAiCourseService {
 
             val resp = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                applyOpenAiAuthHeaders(apiKey, config.isKeylessProxy, deviceId)
                 setBody(payload)
             }
+            resp.headers["X-Free-Remaining"]?.toIntOrNull()?.let { lastQuotaRemaining = it }
+            resp.headers["X-Free-Limit"]?.toIntOrNull()?.let { lastQuotaLimit = it }
             val body = resp.bodyAsText()
             if (resp.status.value !in 200..299) {
                 // 若部分小模型不支持 tools 参数，自动降级为纯 JSON 结构化回复再试一次
@@ -261,7 +297,13 @@ class CumtAiCourseService {
 
             val root = json.parseToJsonElement(body).jsonObject
             val choiceMsg = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.get("message")?.jsonObject
-                ?: return AssistantTurnResult("模型未返回有效回复。", toolTrace, pendingActions)
+                ?: return AssistantTurnResult(
+                    replyText = "模型未返回有效回复。",
+                    toolTrace = toolTrace,
+                    pendingActions = pendingActions,
+                    freeQuotaRemaining = lastQuotaRemaining,
+                    freeQuotaLimit = lastQuotaLimit
+                )
 
             val assistantText = extractTextFromContentElement(choiceMsg["content"])
             val toolCalls = parseOpenAiToolCalls(choiceMsg["tool_calls"] as? JsonArray)
@@ -276,7 +318,9 @@ class CumtAiCourseService {
                         if (finalPending.isNotEmpty()) "已为你解析出以下课表变更，请核对后确认：" else "已完成处理。"
                     },
                     toolTrace = toolTrace,
-                    pendingActions = finalPending
+                    pendingActions = finalPending,
+                    freeQuotaRemaining = lastQuotaRemaining,
+                    freeQuotaLimit = lastQuotaLimit
                 )
             }
 
@@ -332,7 +376,13 @@ class CumtAiCourseService {
                 val reply = assistantText.ifBlank {
                     "我已为你准备好以下课表操作，请核对下方变更卡片并点击「确认应用」："
                 }
-                return AssistantTurnResult(reply, toolTrace, pendingActions)
+                return AssistantTurnResult(
+                    replyText = reply,
+                    toolTrace = toolTrace,
+                    pendingActions = pendingActions,
+                    freeQuotaRemaining = lastQuotaRemaining,
+                    freeQuotaLimit = lastQuotaLimit
+                )
             }
         }
 
@@ -343,7 +393,9 @@ class CumtAiCourseService {
                 "已完成信息检索，如有需要请继续补充说明。"
             },
             toolTrace = toolTrace,
-            pendingActions = pendingActions
+            pendingActions = pendingActions,
+            freeQuotaRemaining = lastQuotaRemaining,
+            freeQuotaLimit = lastQuotaLimit
         )
     }
 
@@ -603,13 +655,14 @@ class CumtAiCourseService {
         apiKey: String,
         imageBytes: ByteArray,
         mimeType: String = "image/jpeg",
-        userHint: String = ""
+        userHint: String = "",
+        deviceId: String = ""
     ): Result<List<CumtAiRecognizedCourse>> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
         val trimmedBase = config.baseUrl.trim()
         val trimmedModel = config.model.trim()
 
-        if (trimmedKey.isBlank()) {
+        if (!config.isKeylessProxy && trimmedKey.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("请先配置并保存 API Key"))
         }
         if (trimmedBase.isBlank()) {
@@ -631,6 +684,8 @@ class CumtAiCourseService {
                     baseUrl = trimmedBase,
                     model = trimmedModel,
                     apiKey = trimmedKey,
+                    isKeylessProxy = config.isKeylessProxy,
+                    deviceId = deviceId,
                     mimeType = mimeType,
                     base64Image = base64Image,
                     userHint = userHint
@@ -662,17 +717,25 @@ class CumtAiCourseService {
 
     suspend fun testConnection(
         config: CumtAiConfig,
-        apiKey: String
+        apiKey: String,
+        deviceId: String = ""
     ): Result<String> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
         val trimmedBase = config.baseUrl.trim()
         val trimmedModel = config.model.trim()
-        if (trimmedKey.isBlank()) return@withContext Result.failure(IllegalArgumentException("请输入 API Key"))
-        if (trimmedBase.isBlank()) return@withContext Result.failure(IllegalArgumentException("请输入 Base URL"))
+        if (!config.isKeylessProxy && trimmedKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("请输入 API Key"))
+        }
+        if (trimmedBase.isBlank()) {
+            return@withContext Result.failure(
+                IllegalArgumentException(if (config.isKeylessProxy) "请输入免费中转地址" else "请输入 Base URL")
+            )
+        }
         if (trimmedModel.isBlank()) return@withContext Result.failure(IllegalArgumentException("请输入模型名称"))
 
         val client = createClient(timeoutMs = 25_000L)
         try {
+            var quotaSuffix = ""
             val reply = when (config.protocolEnum) {
                 CumtAiProtocol.OPENAI_COMPATIBLE -> {
                     val endpoint = buildOpenAiChatEndpoint(trimmedBase)
@@ -689,8 +752,13 @@ class CumtAiCourseService {
                     }.toString()
                     val resp = client.post(endpoint) {
                         contentType(ContentType.Application.Json)
-                        header(HttpHeaders.Authorization, "Bearer $trimmedKey")
+                        applyOpenAiAuthHeaders(trimmedKey, config.isKeylessProxy, deviceId)
                         setBody(payload)
+                    }
+                    val rem = resp.headers["X-Free-Remaining"]?.toIntOrNull()
+                    val lim = resp.headers["X-Free-Limit"]?.toIntOrNull()
+                    if (rem != null && lim != null) {
+                        quotaSuffix = " · 今日剩余 $rem/$lim 次"
                     }
                     val body = resp.bodyAsText()
                     if (resp.status.value !in 200..299) {
@@ -726,7 +794,7 @@ class CumtAiCourseService {
                     extractGeminiContent(body).ifBlank { "连接正常" }
                 }
             }
-            Result.success("连通成功（$trimmedModel）：${reply.take(40)}")
+            Result.success("连通成功（$trimmedModel）：${reply.take(40)}$quotaSuffix")
         } catch (e: Exception) {
             Result.failure(e)
         } finally {
@@ -739,6 +807,8 @@ class CumtAiCourseService {
         baseUrl: String,
         model: String,
         apiKey: String,
+        isKeylessProxy: Boolean,
+        deviceId: String,
         mimeType: String,
         base64Image: String,
         userHint: String
@@ -752,7 +822,7 @@ class CumtAiCourseService {
         )
         val resp = client.post(endpoint) {
             contentType(ContentType.Application.Json)
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+            applyOpenAiAuthHeaders(apiKey, isKeylessProxy, deviceId)
             setBody(payload)
         }
         val body = resp.bodyAsText()
@@ -989,6 +1059,7 @@ class CumtAiCourseService {
         ): CumtAiModelInfo {
             val lower = id.lowercase()
             val isVision = forceVision ||
+                lower == "cumt-free-auto" ||
                 lower.contains("-vl") ||
                 lower.contains("vl-") ||
                 lower.contains("vision") ||

@@ -179,34 +179,43 @@ class CumtAiCourseImportViewModel(
         val cleanKey = apiKey.trim()
         val cleanBase = baseUrl.trim()
         val cleanModel = model.trim()
-        val cleanName = providerName.trim().ifBlank { CumtAiProviderPreset.fromId(providerId).displayName }
+        val preset = CumtAiProviderPreset.fromId(providerId)
+        val isKeyless = !preset.requiresApiKey
+        val cleanName = providerName.trim().ifBlank { preset.displayName }
         if (cleanBase.isBlank()) {
-            ToastManager.show("请填写 API 地址")
+            ToastManager.show(if (isKeyless) "请填写免费中转地址" else "请填写 API 地址")
             return
         }
+        val effectiveModel = cleanModel.ifBlank { if (isKeyless) preset.defaultModel else "" }
         viewModelScope.launch {
             localRepo.saveAiConfig(
                 providerId = providerId,
                 providerName = cleanName,
                 baseUrl = cleanBase,
-                model = cleanModel,
-                protocol = protocol,
-                apiKey = cleanKey
+                model = effectiveModel,
+                protocol = if (isKeyless) CumtAiProtocol.OPENAI_COMPATIBLE else protocol,
+                apiKey = if (isKeyless) "" else cleanKey
             )
-            _savedApiKey.value = cleanKey
+            _savedApiKey.value = if (isKeyless) "" else cleanKey
             _testStatusMessage.value = null
-            ToastManager.show(if (cleanKey.isNotEmpty()) "已保存「$cleanName」" else "已保存接口配置")
-            if (autoDiscoverModels && cleanKey.isNotEmpty()) {
-                sessionRepo.refreshAvailableModels(protocol, cleanBase, cleanKey) { models ->
-                    if (cleanModel.isBlank() && models.isNotEmpty()) {
+            ToastManager.show(if (isKeyless || cleanKey.isNotEmpty()) "已保存「$cleanName」" else "已保存接口配置")
+            if (autoDiscoverModels && (isKeyless || cleanKey.isNotEmpty())) {
+                sessionRepo.refreshAvailableModels(
+                    protocol = if (isKeyless) CumtAiProtocol.OPENAI_COMPATIBLE else protocol,
+                    baseUrl = cleanBase,
+                    apiKey = if (isKeyless) "" else cleanKey,
+                    providerIdOverride = providerId,
+                    allowEmptyKey = isKeyless
+                ) { models ->
+                    if (effectiveModel.isBlank() && models.isNotEmpty()) {
                         viewModelScope.launch {
                             localRepo.saveAiConfig(
                                 providerId = providerId,
                                 providerName = cleanName,
                                 baseUrl = cleanBase,
                                 model = models.first().id,
-                                protocol = protocol,
-                                apiKey = cleanKey
+                                protocol = if (isKeyless) CumtAiProtocol.OPENAI_COMPATIBLE else protocol,
+                                apiKey = if (isKeyless) "" else cleanKey
                             )
                         }
                     }
@@ -323,7 +332,8 @@ class CumtAiCourseImportViewModel(
                 protocol = protocol.name,
                 hasApiKey = apiKey.isNotBlank()
             )
-            aiCourseService.testConnection(tempConfig, apiKey).fold(
+            val deviceId = if (tempConfig.isKeylessProxy) localRepo.getOrCreateAiDeviceId() else ""
+            aiCourseService.testConnection(tempConfig, apiKey, deviceId).fold(
                 onSuccess = { msg ->
                     _testStatusMessage.value = msg
                     ToastManager.show("API 连接测试成功")
@@ -355,6 +365,7 @@ fun CumtAiCourseImportScreen(
     val isBusy by viewModel.sessionRepo.isBusy.collectAsState()
     val isFetchingModels by viewModel.sessionRepo.isFetchingModels.collectAsState()
     val modelFetchNotice by viewModel.sessionRepo.modelFetchNotice.collectAsState()
+    val freeQuotaText by viewModel.sessionRepo.freeQuotaText.collectAsState()
     val isTestingConnection by viewModel.isTestingConnection.collectAsState()
     val testStatusMessage by viewModel.testStatusMessage.collectAsState()
 
@@ -367,12 +378,12 @@ fun CumtAiCourseImportScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var initializedTab by remember { mutableStateOf(false) }
 
-    LaunchedEffect(aiConfig.hasApiKey) {
+    LaunchedEffect(aiConfig.isReadyToChat) {
         viewModel.sessionRepo.markRepliesRead()
         if (!initializedTab) {
             initializedTab = true
-            // 首次进入若尚未配置 Key，自动跳到配置页方便填入
-            if (!aiConfig.hasApiKey) selectedTab = 1
+            // 首次进入若当前通道尚未就绪，自动跳到配置页方便填入
+            if (!aiConfig.isReadyToChat) selectedTab = 1
         }
     }
 
@@ -381,7 +392,11 @@ fun CumtAiCourseImportScreen(
             CumtTopBar(
                 title = "矿大 AI 助手",
                 subtitle = when (selectedTab) {
-                    0 -> "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                    0 -> if (aiConfig.isKeylessProxy && !freeQuotaText.isNullOrBlank()) {
+                        "${aiConfig.effectiveDisplayName} · $freeQuotaText"
+                    } else {
+                        "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                    }
                     1 -> "API 接入、悬浮球与偏好设置"
                     else -> if (mcpRunning) "MCP 运行中 · $mcpEndpoint" else "MCP 本地服务"
                 },
@@ -471,7 +486,7 @@ private fun AiChatTabContent(
     )
 
     Column(modifier = modifier.fillMaxSize()) {
-        if (!aiConfig.hasApiKey) {
+        if (!aiConfig.isReadyToChat) {
             Surface(
                 onClick = onJumpToSettings,
                 shape = RoundedCornerShape(14.dp),
@@ -486,7 +501,11 @@ private fun AiChatTabContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "尚未配置 API Key，点击前往「模型与 Key」配置并自动拉取模型",
+                        text = if (aiConfig.isKeylessProxy) {
+                            "免费体验尚未填写中转地址，点击前往设置或切换为自有 API Key"
+                        } else {
+                            "尚未配置 API Key，点击前往「模型与 Key」配置并自动拉取模型"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = CumtAccent.AMBER.contentColor(),
                         modifier = Modifier.weight(1f)
@@ -673,9 +692,16 @@ private fun AiModelSettingsTabContent(
         draftApiKey = savedApiKey
     }
 
-    // 合并内置精简默认项（DeepSeek / OpenAI / Gemini）与用户自定义接入项
+    // 合并内置精简默认项（免费体验 / DeepSeek / OpenAI / Gemini）与用户自定义接入项
     val slotMap = remember(savedProviderSlots) { savedProviderSlots.associateBy { it.providerId } }
-    val builtinIds = remember { listOf(CumtAiProviderPreset.DEEPSEEK, CumtAiProviderPreset.OPENAI, CumtAiProviderPreset.GEMINI) }
+    val builtinIds = remember {
+        listOf(
+            CumtAiProviderPreset.FREE_PROXY,
+            CumtAiProviderPreset.DEEPSEEK,
+            CumtAiProviderPreset.OPENAI,
+            CumtAiProviderPreset.GEMINI
+        )
+    }
     val providerTabs = remember(savedProviderSlots, draftProviderId, draftProviderName) {
         val list = mutableListOf<Triple<String, String, Boolean>>()
         builtinIds.forEach { preset ->
@@ -685,7 +711,12 @@ private fun AiModelSettingsTabContent(
             } else {
                 saved?.displayName?.takeIf { it.isNotBlank() } ?: preset.displayName
             }
-            list.add(Triple(preset.id, label, saved?.hasKey == true))
+            val configured = if (!preset.requiresApiKey) {
+                (saved?.baseUrl?.takeIf { it.isNotBlank() } ?: preset.defaultBaseUrl).isNotBlank()
+            } else {
+                saved?.hasKey == true
+            }
+            list.add(Triple(preset.id, label, configured))
         }
         val builtinIdSet = builtinIds.map { it.id }.toSet()
         savedProviderSlots
@@ -696,7 +727,7 @@ private fun AiModelSettingsTabContent(
                 } else {
                     slot.effectiveName
                 }
-                list.add(Triple(slot.providerId, label, slot.hasKey))
+                list.add(Triple(slot.providerId, label, slot.isConfigured))
             }
         if (list.none { it.first == draftProviderId }) {
             list.add(Triple(draftProviderId, draftProviderName.ifBlank { "自定义接口" }, false))
@@ -704,6 +735,7 @@ private fun AiModelSettingsTabContent(
         list
     }
     val isCustomNode = draftProviderId !in builtinIds.map { it.id }
+    val isDraftKeyless = !CumtAiProviderPreset.fromId(draftProviderId).requiresApiKey
 
     val filteredModels = remember(cachedModels, modelQuery, visionOnlyFilter) {
         val kw = modelQuery.trim().lowercase()
@@ -751,7 +783,7 @@ private fun AiModelSettingsTabContent(
                             ) {
                                 Text("删除", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                             }
-                        } else if (aiConfig.hasApiKey) {
+                        } else if (!isDraftKeyless && aiConfig.hasApiKey) {
                             TextButton(
                                 onClick = {
                                     viewModel.clearApiKey()
@@ -849,61 +881,78 @@ private fun AiModelSettingsTabContent(
                         }
                     }
 
-                    // 协议切换
-                    CumtSegmentedBar(
-                        options = CumtAiProtocol.entries.map { it.displayName },
-                        selectedIndex = CumtAiProtocol.entries.indexOf(draftProtocol).coerceAtLeast(0),
-                        onSelect = { idx -> draftProtocol = CumtAiProtocol.entries[idx] }
-                    )
+                    // 协议切换（免费体验固定走 OpenAI 兼容免 Key 通道）
+                    if (!isDraftKeyless) {
+                        CumtSegmentedBar(
+                            options = CumtAiProtocol.entries.map { it.displayName },
+                            selectedIndex = CumtAiProtocol.entries.indexOf(draftProtocol).coerceAtLeast(0),
+                            onSelect = { idx -> draftProtocol = CumtAiProtocol.entries[idx] }
+                        )
+                    }
 
                     // 极简无硬框分组表单
                     MinimalApiField(
                         label = "显示名称",
                         value = draftProviderName,
                         onValueChange = { draftProviderName = it },
-                        placeholder = "例如 DeepSeek / 我的中转站"
+                        placeholder = if (isDraftKeyless) "免费体验" else "例如 DeepSeek / 我的中转站"
                     )
 
                     MinimalApiField(
-                        label = "API 地址",
+                        label = if (isDraftKeyless) "中转地址" else "API 地址",
                         value = draftBaseUrl,
                         onValueChange = { draftBaseUrl = it },
-                        placeholder = "https://api.deepseek.com/v1"
+                        placeholder = if (isDraftKeyless) "https://your-worker.workers.dev/v1" else "https://api.deepseek.com/v1"
                     )
 
-                    MinimalApiField(
-                        label = "API Key",
-                        value = draftApiKey,
-                        onValueChange = { draftApiKey = it },
-                        placeholder = "sk-...",
-                        isSecret = !showApiKeyPlain,
-                        trailing = {
-                            Text(
-                                text = if (showApiKeyPlain) "隐藏" else "显示",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { showApiKeyPlain = !showApiKeyPlain }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                            )
-                        }
-                    )
+                    if (isDraftKeyless) {
+                        Text(
+                            text = if (draftBaseUrl.isBlank()) {
+                                "部署项目内 cloudflare-ai-proxy 后填入地址即可免 Key 对话与识图"
+                            } else {
+                                "免 Key 自动区分文字与识图模型，单设备按日限流"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        )
+                    } else {
+                        MinimalApiField(
+                            label = "API Key",
+                            value = draftApiKey,
+                            onValueChange = { draftApiKey = it },
+                            placeholder = "sk-...",
+                            isSecret = !showApiKeyPlain,
+                            trailing = {
+                                Text(
+                                    text = if (showApiKeyPlain) "隐藏" else "显示",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showApiKeyPlain = !showApiKeyPlain }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                )
+                            }
+                        )
+                    }
 
                     MinimalApiField(
                         label = "模型",
                         value = draftModel,
                         onValueChange = { draftModel = it },
-                        placeholder = "deepseek-chat",
+                        placeholder = if (isDraftKeyless) "cumt-free-auto" else "deepseek-chat",
                         trailing = {
                             Surface(
                                 onClick = {
-                                    if (!isFetchingModels && draftApiKey.isNotBlank() && draftBaseUrl.isNotBlank()) {
+                                    if (!isFetchingModels && draftBaseUrl.isNotBlank() && (isDraftKeyless || draftApiKey.isNotBlank())) {
                                         viewModel.sessionRepo.refreshAvailableModels(
-                                            protocol = draftProtocol,
+                                            protocol = if (isDraftKeyless) CumtAiProtocol.OPENAI_COMPATIBLE else draftProtocol,
                                             baseUrl = draftBaseUrl,
-                                            apiKey = draftApiKey
+                                            apiKey = if (isDraftKeyless) "" else draftApiKey,
+                                            providerIdOverride = draftProviderId,
+                                            allowEmptyKey = isDraftKeyless
                                         )
                                     }
                                 },
@@ -1062,12 +1111,13 @@ private fun AiModelSettingsTabContent(
                                 viewModel.testConnection(
                                     providerId = draftProviderId,
                                     baseUrl = draftBaseUrl,
-                                    model = draftModel,
-                                    protocol = draftProtocol,
-                                    apiKey = draftApiKey
+                                    model = draftModel.ifBlank { if (isDraftKeyless) CumtAiProviderPreset.FREE_PROXY.defaultModel else "" },
+                                    protocol = if (isDraftKeyless) CumtAiProtocol.OPENAI_COMPATIBLE else draftProtocol,
+                                    apiKey = if (isDraftKeyless) "" else draftApiKey
                                 )
                             },
-                            enabled = !isTestingConnection && draftApiKey.isNotBlank() && draftModel.isNotBlank(),
+                            enabled = !isTestingConnection && draftBaseUrl.isNotBlank() &&
+                                (isDraftKeyless || (draftApiKey.isNotBlank() && draftModel.isNotBlank())),
                             shape = CircleShape,
                             modifier = Modifier.weight(1f)
                         ) {

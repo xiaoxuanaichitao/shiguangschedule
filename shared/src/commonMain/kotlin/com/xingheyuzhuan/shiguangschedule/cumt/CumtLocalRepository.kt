@@ -16,6 +16,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Named
 import org.koin.core.annotation.Single
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 @Single
 class CumtLocalRepository(
@@ -69,6 +71,7 @@ class CumtLocalRepository(
         val KEY_AI_AUTO_EXEC_WRITES = booleanPreferencesKey("cumt_ai_auto_exec_writes")
         val KEY_AI_PROVIDER_SLOTS_JSON = stringPreferencesKey("cumt_ai_provider_slots_json")
         val KEY_AI_CHAT_HISTORY_JSON = stringPreferencesKey("cumt_ai_chat_history_json")
+        val KEY_AI_DEVICE_ID = stringPreferencesKey("cumt_ai_device_id")
 
         val KEY_MCP_ENABLED = booleanPreferencesKey("cumt_mcp_enabled")
         val KEY_MCP_PORT = intPreferencesKey("cumt_mcp_port")
@@ -360,8 +363,26 @@ class CumtLocalRepository(
 
     // ==================== AI 识图 API Key 配置 ====================
 
+    private fun defaultInitialProviderId(): String =
+        if (CumtConstants.FREE_AI_PROXY_BASE_URL.isNotBlank()) {
+            CumtAiProviderPreset.FREE_PROXY.id
+        } else {
+            CumtAiProviderPreset.DEEPSEEK.id
+        }
+
+    @OptIn(ExperimentalUuidApi::class)
+    suspend fun getOrCreateAiDeviceId(): String {
+        val existing = dataStore.data.first()[KEY_AI_DEVICE_ID].orEmpty().trim()
+        if (existing.isNotEmpty()) return existing
+        val generated = Uuid.random().toString().replace("-", "")
+        dataStore.edit { prefs ->
+            prefs[KEY_AI_DEVICE_ID] = generated
+        }
+        return generated
+    }
+
     val aiConfigFlow: Flow<CumtAiConfig> = dataStore.data.map { prefs ->
-        val rawProviderId = prefs[KEY_AI_PROVIDER_ID]?.takeIf { it.isNotBlank() } ?: CumtAiProviderPreset.DEEPSEEK.id
+        val rawProviderId = prefs[KEY_AI_PROVIDER_ID]?.takeIf { it.isNotBlank() } ?: defaultInitialProviderId()
         val preset = CumtAiProviderPreset.fromId(rawProviderId)
         val slots = decodeProviderSlots(null, prefs[KEY_AI_PROVIDER_SLOTS_JSON])
         val activeSlot = slots[rawProviderId]
@@ -370,11 +391,17 @@ class CumtLocalRepository(
             ?: preset.displayName
         val hasKey = !prefs[KEY_AI_ENC_API_KEY].isNullOrEmpty() ||
             !prefs[KEY_AI_PLAIN_FALLBACK].isNullOrEmpty()
+        val resolvedBaseUrl = prefs[KEY_AI_BASE_URL]?.takeIf { it.isNotBlank() }
+            ?: activeSlot?.baseUrl?.takeIf { it.isNotBlank() }
+            ?: preset.defaultBaseUrl
+        val resolvedModel = prefs[KEY_AI_MODEL]?.takeIf { it.isNotBlank() }
+            ?: activeSlot?.model?.takeIf { it.isNotBlank() }
+            ?: preset.defaultModel
         CumtAiConfig(
             providerId = rawProviderId,
             providerName = resolvedName,
-            baseUrl = prefs[KEY_AI_BASE_URL] ?: preset.defaultBaseUrl,
-            model = prefs[KEY_AI_MODEL] ?: preset.defaultModel,
+            baseUrl = resolvedBaseUrl,
+            model = resolvedModel,
             protocol = prefs[KEY_AI_PROTOCOL] ?: preset.protocol.name,
             hasApiKey = hasKey,
             floatingOrbEnabled = prefs[KEY_AI_ORB_ENABLED] ?: true,
@@ -457,6 +484,17 @@ class CumtLocalRepository(
             }
             return aiConfigFlow.first() to decryptedKey
         }
+        if (slot == null && targetId == CumtAiProviderPreset.FREE_PROXY.id && CumtConstants.FREE_AI_PROXY_BASE_URL.isNotBlank()) {
+            saveAiConfig(
+                providerId = targetId,
+                providerName = preset.displayName,
+                baseUrl = preset.defaultBaseUrl,
+                model = preset.defaultModel,
+                protocol = preset.protocol,
+                apiKey = ""
+            )
+            return aiConfigFlow.first() to ""
+        }
         val emptyCfg = aiConfigFlow.first().copy(
             providerId = targetId,
             providerName = preset.displayName,
@@ -473,6 +511,7 @@ class CumtLocalRepository(
         val slots = decodeProviderSlots(null, prefsSnap[KEY_AI_PROVIDER_SLOTS_JSON]).toMutableMap()
         slots.remove(providerId)
         val wasActive = prefsSnap[KEY_AI_PROVIDER_ID] == providerId
+        val fallbackPreset = CumtAiProviderPreset.fromId(defaultInitialProviderId())
         dataStore.edit { prefs ->
             prefs[KEY_AI_PROVIDER_SLOTS_JSON] =
                 json.encodeToString(ListSerializer(CumtAiProviderSlot.serializer()), slots.values.toList())
@@ -480,11 +519,11 @@ class CumtLocalRepository(
                 prefs.remove(KEY_AI_ENC_API_KEY)
                 prefs.remove(KEY_AI_API_KEY_IV)
                 prefs.remove(KEY_AI_PLAIN_FALLBACK)
-                prefs[KEY_AI_PROVIDER_ID] = CumtAiProviderPreset.DEEPSEEK.id
-                prefs[KEY_AI_PROVIDER_NAME] = CumtAiProviderPreset.DEEPSEEK.displayName
-                prefs[KEY_AI_BASE_URL] = CumtAiProviderPreset.DEEPSEEK.defaultBaseUrl
-                prefs[KEY_AI_MODEL] = CumtAiProviderPreset.DEEPSEEK.defaultModel
-                prefs[KEY_AI_PROTOCOL] = CumtAiProviderPreset.DEEPSEEK.protocol.name
+                prefs[KEY_AI_PROVIDER_ID] = fallbackPreset.id
+                prefs[KEY_AI_PROVIDER_NAME] = fallbackPreset.displayName
+                prefs[KEY_AI_BASE_URL] = fallbackPreset.defaultBaseUrl
+                prefs[KEY_AI_MODEL] = fallbackPreset.defaultModel
+                prefs[KEY_AI_PROTOCOL] = fallbackPreset.protocol.name
             }
         }
     }

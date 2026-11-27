@@ -181,7 +181,9 @@ class AppSettingsRepository(
         blurDp: Float? = null,
         dimAlpha: Float? = null,
         glassEnabled: Boolean? = null,
-        cardFrost: Float? = null
+        cardFrost: Float? = null,
+        syncCampus: Boolean? = null,
+        syncSettings: Boolean? = null
     ) {
         dataStore.edit { prefs ->
             followDarkMode?.let { prefs[AppSettingsModel.KEY_WALLPAPER_FOLLOW_DARK_MODE] = it }
@@ -189,6 +191,8 @@ class AppSettingsRepository(
             dimAlpha?.let { prefs[AppSettingsModel.KEY_WALLPAPER_DIM_ALPHA] = it.coerceIn(0f, 0.55f) }
             glassEnabled?.let { prefs[AppSettingsModel.KEY_WALLPAPER_GLASS_ENABLED] = it }
             cardFrost?.let { prefs[AppSettingsModel.KEY_WALLPAPER_CARD_FROST] = it.coerceIn(0f, 0.85f) }
+            syncCampus?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_CAMPUS] = it }
+            syncSettings?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SETTINGS] = it }
         }
     }
 
@@ -221,6 +225,8 @@ class AppSettingsRepository(
             prefs[AppSettingsModel.KEY_RECENT_WALLPAPERS_JSON] = Json.encodeToString(
                 newSettings.recentWallpapers.filter { it.isNotBlank() }.distinct().take(3)
             )
+            prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_CAMPUS] = newSettings.wallpaperSyncCampus
+            prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SETTINGS] = newSettings.wallpaperSyncSettings
             prefs[AppSettingsModel.KEY_DEVELOPER_MODE_ENABLED] = newSettings.developerModeEnabled
             prefs[AppSettingsModel.KEY_APP_UI_FONT_SCALE] = newSettings.appUiFontScale.coerceIn(0.85f, 1.25f)
         }

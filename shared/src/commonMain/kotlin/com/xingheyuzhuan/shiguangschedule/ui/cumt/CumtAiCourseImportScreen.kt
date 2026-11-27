@@ -1,6 +1,7 @@
 package com.xingheyuzhuan.shiguangschedule.ui.cumt
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
@@ -41,6 +43,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiOrbIconStyle
+import com.xingheyuzhuan.shiguangschedule.cumt.CumtAiProviderSlot
 import com.xingheyuzhuan.shiguangschedule.ui.components.encodeImageBitmapForAi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -48,6 +51,7 @@ import kotlinx.coroutines.withContext
 import okio.FileSystem
 import okio.Path
 import org.koin.core.annotation.Named
+import shiguangschedule.shared.generated.resources.add_24px
 import shiguangschedule.shared.generated.resources.image_24px
 import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
@@ -60,8 +64,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -133,6 +139,12 @@ class CumtAiCourseImportViewModel(
         initialValue = emptyList()
     )
 
+    val savedProviderSlots: StateFlow<List<CumtAiProviderSlot>> = localRepo.savedAiProviderSlotsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
     val mcpConfig: StateFlow<CumtMcpConfig> = localRepo.mcpConfigFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -156,6 +168,7 @@ class CumtAiCourseImportViewModel(
 
     fun saveApiConfig(
         providerId: String,
+        providerName: String = "",
         baseUrl: String,
         model: String,
         protocol: CumtAiProtocol,
@@ -166,13 +179,15 @@ class CumtAiCourseImportViewModel(
         val cleanKey = apiKey.trim()
         val cleanBase = baseUrl.trim()
         val cleanModel = model.trim()
+        val cleanName = providerName.trim().ifBlank { CumtAiProviderPreset.fromId(providerId).displayName }
         if (cleanBase.isBlank()) {
-            ToastManager.show("请填写 API Base URL")
+            ToastManager.show("请填写 API 地址")
             return
         }
         viewModelScope.launch {
             localRepo.saveAiConfig(
                 providerId = providerId,
+                providerName = cleanName,
                 baseUrl = cleanBase,
                 model = cleanModel,
                 protocol = protocol,
@@ -180,14 +195,14 @@ class CumtAiCourseImportViewModel(
             )
             _savedApiKey.value = cleanKey
             _testStatusMessage.value = null
-            ToastManager.show(if (cleanKey.isNotEmpty()) "API Key 配置已加密保存" else "已保存接口配置（未填 Key）")
+            ToastManager.show(if (cleanKey.isNotEmpty()) "已保存「$cleanName」" else "已保存接口配置")
             if (autoDiscoverModels && cleanKey.isNotEmpty()) {
                 sessionRepo.refreshAvailableModels(protocol, cleanBase, cleanKey) { models ->
-                    // 若用户尚未选填模型，自动选中第一个推荐模型
                     if (cleanModel.isBlank() && models.isNotEmpty()) {
                         viewModelScope.launch {
                             localRepo.saveAiConfig(
                                 providerId = providerId,
+                                providerName = cleanName,
                                 baseUrl = cleanBase,
                                 model = models.first().id,
                                 protocol = protocol,
@@ -207,19 +222,33 @@ class CumtAiCourseImportViewModel(
             localRepo.saveCachedAiModels(emptyList())
             _savedApiKey.value = ""
             _testStatusMessage.value = null
-            ToastManager.show("已清除当前服务商保存的 API Key")
+            ToastManager.show("已清除当前 API Key")
         }
     }
 
     fun switchProviderSlot(
-        preset: CumtAiProviderPreset,
+        providerId: String,
         onLoaded: (CumtAiConfig, String) -> Unit
     ) {
         viewModelScope.launch {
-            val (cfg, key) = localRepo.loadOrSwitchAiProviderSlot(preset.id)
+            val (cfg, key) = localRepo.loadOrSwitchAiProviderSlot(providerId)
             _savedApiKey.value = key
             _testStatusMessage.value = null
             onLoaded(cfg, key)
+        }
+    }
+
+    fun deleteCustomProvider(
+        providerId: String,
+        onReset: (CumtAiConfig, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            localRepo.deleteAiProviderSlot(providerId)
+            val (cfg, key) = localRepo.loadOrSwitchAiProviderSlot(CumtAiProviderPreset.DEEPSEEK.id)
+            _savedApiKey.value = key
+            _testStatusMessage.value = null
+            ToastManager.show("已删除该接入配置")
+            onReset(cfg, key)
         }
     }
 
@@ -319,6 +348,7 @@ fun CumtAiCourseImportScreen(
     val aiConfig by viewModel.aiConfig.collectAsState()
     val savedApiKey by viewModel.savedApiKey.collectAsState()
     val cachedModels by viewModel.cachedModels.collectAsState()
+    val savedProviderSlots by viewModel.savedProviderSlots.collectAsState()
     val mcpConfig by viewModel.mcpConfig.collectAsState()
 
     val messages by viewModel.sessionRepo.messages.collectAsState()
@@ -351,9 +381,9 @@ fun CumtAiCourseImportScreen(
             CumtTopBar(
                 title = "矿大 AI 助手",
                 subtitle = when (selectedTab) {
-                    0 -> "${aiConfig.presetEnum.displayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
-                    1 -> "自动识别可用模型 · 悬浮球与 Key 设置"
-                    else -> if (mcpRunning) "MCP 运行中 · $mcpEndpoint" else "MCP 本地服务（外部 Agent 读写接口）"
+                    0 -> "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                    1 -> "API 接入、悬浮球与偏好设置"
+                    else -> if (mcpRunning) "MCP 运行中 · $mcpEndpoint" else "MCP 本地服务"
                 },
                 onBack = onBack,
                 actions = {
@@ -395,6 +425,7 @@ fun CumtAiCourseImportScreen(
                     aiConfig = aiConfig,
                     savedApiKey = savedApiKey,
                     cachedModels = cachedModels,
+                    savedProviderSlots = savedProviderSlots,
                     isFetchingModels = isFetchingModels,
                     modelFetchNotice = modelFetchNotice,
                     isTestingConnection = isTestingConnection,
@@ -613,6 +644,7 @@ private fun AiModelSettingsTabContent(
     aiConfig: CumtAiConfig,
     savedApiKey: String,
     cachedModels: List<CumtAiModelInfo>,
+    savedProviderSlots: List<CumtAiProviderSlot>,
     isFetchingModels: Boolean,
     modelFetchNotice: String?,
     isTestingConnection: Boolean,
@@ -622,6 +654,7 @@ private fun AiModelSettingsTabContent(
     modifier: Modifier = Modifier
 ) {
     var draftProviderId by remember { mutableStateOf(aiConfig.providerId) }
+    var draftProviderName by remember { mutableStateOf(aiConfig.effectiveDisplayName) }
     var draftBaseUrl by remember { mutableStateOf(aiConfig.baseUrl) }
     var draftModel by remember { mutableStateOf(aiConfig.model) }
     var draftProtocol by remember { mutableStateOf(aiConfig.protocolEnum) }
@@ -631,13 +664,46 @@ private fun AiModelSettingsTabContent(
     var modelQuery by remember { mutableStateOf("") }
     var visionOnlyFilter by remember { mutableStateOf(false) }
 
-    LaunchedEffect(aiConfig.providerId, aiConfig.baseUrl, aiConfig.model, aiConfig.protocol, savedApiKey) {
+    LaunchedEffect(aiConfig.providerId, aiConfig.providerName, aiConfig.baseUrl, aiConfig.model, aiConfig.protocol, savedApiKey) {
         draftProviderId = aiConfig.providerId
+        draftProviderName = aiConfig.effectiveDisplayName
         draftBaseUrl = aiConfig.baseUrl
         draftModel = aiConfig.model
         draftProtocol = aiConfig.protocolEnum
         draftApiKey = savedApiKey
     }
+
+    // 合并内置精简默认项（DeepSeek / OpenAI / Gemini）与用户自定义接入项
+    val slotMap = remember(savedProviderSlots) { savedProviderSlots.associateBy { it.providerId } }
+    val builtinIds = remember { listOf(CumtAiProviderPreset.DEEPSEEK, CumtAiProviderPreset.OPENAI, CumtAiProviderPreset.GEMINI) }
+    val providerTabs = remember(savedProviderSlots, draftProviderId, draftProviderName) {
+        val list = mutableListOf<Triple<String, String, Boolean>>()
+        builtinIds.forEach { preset ->
+            val saved = slotMap[preset.id]
+            val label = if (draftProviderId == preset.id && draftProviderName.isNotBlank()) {
+                draftProviderName
+            } else {
+                saved?.displayName?.takeIf { it.isNotBlank() } ?: preset.displayName
+            }
+            list.add(Triple(preset.id, label, saved?.hasKey == true))
+        }
+        val builtinIdSet = builtinIds.map { it.id }.toSet()
+        savedProviderSlots
+            .filter { it.providerId !in builtinIdSet }
+            .forEach { slot ->
+                val label = if (draftProviderId == slot.providerId && draftProviderName.isNotBlank()) {
+                    draftProviderName
+                } else {
+                    slot.effectiveName
+                }
+                list.add(Triple(slot.providerId, label, slot.hasKey))
+            }
+        if (list.none { it.first == draftProviderId }) {
+            list.add(Triple(draftProviderId, draftProviderName.ifBlank { "自定义接口" }, false))
+        }
+        list
+    }
+    val isCustomNode = draftProviderId !in builtinIds.map { it.id }
 
     val filteredModels = remember(cachedModels, modelQuery, visionOnlyFilter) {
         val kw = modelQuery.trim().lowercase()
@@ -650,93 +716,331 @@ private fun AiModelSettingsTabContent(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. 服务商与 API Key 卡
+        // 1. 极简接口接入卡（默认 DeepSeek，支持自由新增与修改显示名称）
         item {
             CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    CumtSectionHeader(
-                        title = "服务商与 API Key",
-                        subtitle = "填入 Key 后点击「自动识别模型」或保存即可拉取可用模型"
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        CumtSectionHeader(
+                            title = "API 接入",
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isCustomNode) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.deleteCustomProvider(draftProviderId) { cfg, key ->
+                                        draftProviderId = cfg.providerId
+                                        draftProviderName = cfg.effectiveDisplayName
+                                        draftProtocol = cfg.protocolEnum
+                                        draftBaseUrl = cfg.baseUrl
+                                        draftModel = cfg.model
+                                        draftApiKey = key
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("删除", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                            }
+                        } else if (aiConfig.hasApiKey) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.clearApiKey()
+                                    draftApiKey = ""
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("清除 Key", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
 
+                    // 服务商切换胶囊 + 新增自定义节点
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CumtAiProviderPreset.entries.forEach { preset ->
-                            FilterChip(
-                                selected = draftProviderId == preset.id,
+                        providerTabs.forEach { (pid, label, configured) ->
+                            val selected = draftProviderId == pid
+                            Surface(
                                 onClick = {
-                                    viewModel.switchProviderSlot(preset) { loadedCfg, loadedKey ->
+                                    viewModel.switchProviderSlot(pid) { loadedCfg, loadedKey ->
                                         draftProviderId = loadedCfg.providerId
+                                        draftProviderName = loadedCfg.effectiveDisplayName
                                         draftProtocol = loadedCfg.protocolEnum
                                         draftBaseUrl = loadedCfg.baseUrl
                                         draftModel = loadedCfg.model
                                         draftApiKey = loadedKey
                                     }
                                 },
-                                label = { Text(preset.displayName) }
-                            )
+                                shape = CircleShape,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f)
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (configured) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(if (selected) Color(0xFF4ADE80) else Color(0xFF10B981))
+                                        )
+                                    }
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            onClick = {
+                                val newId = "custom_${kotlin.time.Clock.System.now().toEpochMilliseconds()}"
+                                draftProviderId = newId
+                                draftProviderName = "自定义接口"
+                                draftProtocol = CumtAiProtocol.OPENAI_COMPATIBLE
+                                draftBaseUrl = ""
+                                draftModel = ""
+                                draftApiKey = ""
+                            },
+                            shape = CircleShape,
+                            color = Color.Transparent,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = vectorResource(Res.drawable.add_24px),
+                                    contentDescription = "新增接入",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "新增",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
-                    Text(
-                        text = CumtAiProviderPreset.fromId(draftProviderId).hint,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
+                    // 协议切换
                     CumtSegmentedBar(
                         options = CumtAiProtocol.entries.map { it.displayName },
                         selectedIndex = CumtAiProtocol.entries.indexOf(draftProtocol).coerceAtLeast(0),
                         onSelect = { idx -> draftProtocol = CumtAiProtocol.entries[idx] }
                     )
 
-                    OutlinedTextField(
-                        value = draftApiKey,
-                        onValueChange = { draftApiKey = it },
-                        label = { Text("API Key（本地加密存储）") },
-                        placeholder = { Text("sk-xxxx / AIzaSy...") },
-                        singleLine = true,
-                        visualTransformation = if (showApiKeyPlain) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            TextButton(onClick = { showApiKeyPlain = !showApiKeyPlain }) {
-                                Text(if (showApiKeyPlain) "隐藏" else "显示")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                    // 极简无硬框分组表单
+                    MinimalApiField(
+                        label = "显示名称",
+                        value = draftProviderName,
+                        onValueChange = { draftProviderName = it },
+                        placeholder = "例如 DeepSeek / 我的中转站"
                     )
 
-                    OutlinedTextField(
+                    MinimalApiField(
+                        label = "API 地址",
                         value = draftBaseUrl,
                         onValueChange = { draftBaseUrl = it },
-                        label = { Text("API Base URL") },
-                        placeholder = { Text("https://api.siliconflow.cn/v1") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        placeholder = "https://api.deepseek.com/v1"
                     )
 
-                    OutlinedTextField(
+                    MinimalApiField(
+                        label = "API Key",
+                        value = draftApiKey,
+                        onValueChange = { draftApiKey = it },
+                        placeholder = "sk-...",
+                        isSecret = !showApiKeyPlain,
+                        trailing = {
+                            Text(
+                                text = if (showApiKeyPlain) "隐藏" else "显示",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showApiKeyPlain = !showApiKeyPlain }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            )
+                        }
+                    )
+
+                    MinimalApiField(
+                        label = "模型",
                         value = draftModel,
                         onValueChange = { draftModel = it },
-                        label = { Text("当前使用模型（可从下方自动识别列表点选）") },
-                        placeholder = { Text("Qwen/Qwen2.5-VL-72B-Instruct") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        placeholder = "deepseek-chat",
+                        trailing = {
+                            Surface(
+                                onClick = {
+                                    if (!isFetchingModels && draftApiKey.isNotBlank() && draftBaseUrl.isNotBlank()) {
+                                        viewModel.sessionRepo.refreshAvailableModels(
+                                            protocol = draftProtocol,
+                                            baseUrl = draftBaseUrl,
+                                            apiKey = draftApiKey
+                                        )
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (isFetchingModels) {
+                                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.8.dp)
+                                    } else {
+                                        Icon(
+                                            vectorResource(Res.drawable.refresh_24px),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(13.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Text(
+                                        text = "拉取",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
                     )
+
+                    // 可用模型快速点选区（仅在拉取到模型时优雅展开）
+                    if (cachedModels.isNotEmpty()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "可用模型（${filteredModels.size}）",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                FilterChip(
+                                    selected = visionOnlyFilter,
+                                    onClick = { visionOnlyFilter = !visionOnlyFilter },
+                                    label = { Text("仅视觉", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                            if (cachedModels.size > 6) {
+                                MinimalApiField(
+                                    label = "",
+                                    value = modelQuery,
+                                    onValueChange = { modelQuery = it },
+                                    placeholder = "筛选模型名称…"
+                                )
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                filteredModels.take(30).forEach { modelInfo ->
+                                    val isSelected = draftModel.equals(modelInfo.id, ignoreCase = true)
+                                    Surface(
+                                        onClick = {
+                                            draftModel = modelInfo.id
+                                            viewModel.saveApiConfig(
+                                                providerId = draftProviderId,
+                                                providerName = draftProviderName,
+                                                baseUrl = draftBaseUrl,
+                                                model = modelInfo.id,
+                                                protocol = draftProtocol,
+                                                apiKey = draftApiKey,
+                                                autoDiscoverModels = false
+                                            )
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.36f)
+                                        },
+                                        border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = modelInfo.id,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                if (modelInfo.supportsVision) {
+                                                    CumtStatusPill(
+                                                        text = "视觉",
+                                                        containerColor = CumtAccent.VIOLET.containerColor(),
+                                                        contentColor = CumtAccent.VIOLET.contentColor()
+                                                    )
+                                                }
+                                                if (isSelected) {
+                                                    Icon(
+                                                        vectorResource(Res.drawable.check_24px),
+                                                        contentDescription = "已选中",
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (!modelFetchNotice.isNullOrBlank()) {
+                        Text(
+                            text = modelFetchNotice,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     if (!testStatusMessage.isNullOrBlank()) {
                         val isFail = testStatusMessage.startsWith("失败")
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (isFail) CumtAccent.CORAL.containerColor() else CumtAccent.EMERALD.containerColor(),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -744,14 +1048,14 @@ private fun AiModelSettingsTabContent(
                                 text = testStatusMessage,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isFail) CumtAccent.CORAL.contentColor() else CumtAccent.EMERALD.contentColor(),
-                                modifier = Modifier.padding(10.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
                             )
                         }
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedButton(
                             onClick = {
@@ -764,19 +1068,21 @@ private fun AiModelSettingsTabContent(
                                 )
                             },
                             enabled = !isTestingConnection && draftApiKey.isNotBlank() && draftModel.isNotBlank(),
+                            shape = CircleShape,
                             modifier = Modifier.weight(1f)
                         ) {
                             if (isTestingConnection) {
-                                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(6.dp))
                             }
-                            Text("测试连通")
+                            Text("测试连接")
                         }
 
                         Button(
                             onClick = {
                                 viewModel.saveApiConfig(
                                     providerId = draftProviderId,
+                                    providerName = draftProviderName,
                                     baseUrl = draftBaseUrl,
                                     model = draftModel,
                                     protocol = draftProtocol,
@@ -784,185 +1090,10 @@ private fun AiModelSettingsTabContent(
                                     autoDiscoverModels = true
                                 )
                             },
-                            modifier = Modifier.weight(1f)
+                            shape = CircleShape,
+                            modifier = Modifier.weight(1.2f)
                         ) {
-                            Icon(vectorResource(Res.drawable.save_24px), contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("保存并识模型")
-                        }
-                    }
-
-                    if (aiConfig.hasApiKey) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = onJumpToChat) {
-                                Text("返回对话 ›")
-                            }
-                            TextButton(onClick = {
-                                viewModel.clearApiKey()
-                                draftApiKey = ""
-                            }) {
-                                Text("清除 API Key", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. 自动识别可用模型列表
-        item {
-            CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "自动识别可用模型（${cachedModels.size}）",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = modelFetchNotice ?: "支持从 OpenAI 兼容 /models 与 Gemini /models 自动发现",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.sessionRepo.refreshAvailableModels(
-                                    protocol = draftProtocol,
-                                    baseUrl = draftBaseUrl,
-                                    apiKey = draftApiKey
-                                )
-                            },
-                            enabled = !isFetchingModels && draftApiKey.isNotBlank() && draftBaseUrl.isNotBlank()
-                        ) {
-                            if (isFetchingModels) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(6.dp))
-                            } else {
-                                Icon(vectorResource(Res.drawable.refresh_24px), contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                            }
-                            Text("自动拉取")
-                        }
-                    }
-
-                    if (cachedModels.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = modelQuery,
-                                onValueChange = { modelQuery = it },
-                                placeholder = { Text("搜索模型名...") },
-                                leadingIcon = {
-                                    Icon(vectorResource(Res.drawable.search_24px), contentDescription = null, modifier = Modifier.size(18.dp))
-                                },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = visionOnlyFilter,
-                                onClick = { visionOnlyFilter = !visionOnlyFilter },
-                                label = { Text("仅视觉") }
-                            )
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            filteredModels.take(40).forEach { modelInfo ->
-                                val isSelected = draftModel.equals(modelInfo.id, ignoreCase = true)
-                                Surface(
-                                    onClick = {
-                                        draftModel = modelInfo.id
-                                        viewModel.saveApiConfig(
-                                            providerId = draftProviderId,
-                                            baseUrl = draftBaseUrl,
-                                            model = modelInfo.id,
-                                            protocol = draftProtocol,
-                                            apiKey = draftApiKey,
-                                            autoDiscoverModels = false
-                                        )
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f)
-                                    },
-                                    border = if (isSelected) {
-                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                                    } else null,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = modelInfo.id,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Spacer(Modifier.height(3.dp))
-                                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                                if (modelInfo.supportsVision) {
-                                                    CumtStatusPill(
-                                                        text = "视觉识图",
-                                                        containerColor = CumtAccent.VIOLET.containerColor(),
-                                                        contentColor = CumtAccent.VIOLET.contentColor()
-                                                    )
-                                                }
-                                                if (modelInfo.supportsTools) {
-                                                    CumtStatusPill(
-                                                        text = "工具调用",
-                                                        containerColor = CumtAccent.TEAL.containerColor(),
-                                                        contentColor = CumtAccent.TEAL.contentColor()
-                                                    )
-                                                }
-                                                if (modelInfo.isReasoning) {
-                                                    CumtStatusPill(
-                                                        text = "深度思考",
-                                                        containerColor = CumtAccent.AMBER.containerColor(),
-                                                        contentColor = CumtAccent.AMBER.contentColor()
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        if (isSelected) {
-                                            Icon(
-                                                vectorResource(Res.drawable.check_24px),
-                                                contentDescription = "已选中",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            if (filteredModels.size > 40) {
-                                Text(
-                                    text = "已展示前 40 个匹配模型，可输入关键词精准筛选",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text("保存配置", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -1170,6 +1301,65 @@ private fun AiModelSettingsTabContent(
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun MinimalApiField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    isSecret: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (label.isNotBlank()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 2.dp)
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.52f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 13.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    visualTransformation = if (isSecret) PasswordVisualTransformation() else VisualTransformation.None,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (value.isEmpty()) {
+                                Text(
+                                    text = placeholder,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            inner()
+                        }
+                    }
+                )
+                trailing?.invoke()
+            }
         }
     }
 }

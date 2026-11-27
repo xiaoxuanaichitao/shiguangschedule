@@ -953,14 +953,14 @@ class CumtUnitTests {
     @Test
     fun formatCourseLocationCompactSplitsCampusAndRoomCleanly() {
         assertEquals(
-            "南湖校区\n博2-B402",
+            "南湖校区\n博\u20602-B402",
             com.xingheyuzhuan.shiguangschedule.ui.schedule.components.formatCourseLocationCompact(
                 "南湖校区博2-B402",
                 removeLocationAt = true
             )
         )
         assertEquals(
-            "@文昌校区\n教1-203",
+            "@文昌校区\n教\u20601-203",
             com.xingheyuzhuan.shiguangschedule.ui.schedule.components.formatCourseLocationCompact(
                 "@文昌校区 教1-203",
                 removeLocationAt = false
@@ -973,5 +973,7 @@ class CumtUnitTests {
                 removeLocationAt = true
             )
         )
+        assertEquals(CumtAiProviderPreset.DEEPSEEK, CumtAiProviderPreset.fromId(null))
+        assertEquals("DeepSeek", CumtAiConfig().effectiveDisplayName)
     }
 }

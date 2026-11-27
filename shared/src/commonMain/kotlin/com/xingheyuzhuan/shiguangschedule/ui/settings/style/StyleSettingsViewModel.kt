@@ -285,6 +285,14 @@ class StyleSettingsViewModel(
         appSettingsRepository.updateWallpaperVisuals(cardFrost = frost)
     }
 
+    fun updateWallpaperSyncCampus(sync: Boolean) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(syncCampus = sync)
+    }
+
+    fun updateWallpaperSyncSettings(sync: Boolean) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(syncSettings = sync)
+    }
+
     /**
      * 恢复当前模式默认纯色背景（保留最近三张相册历史以便随时找回）
      */

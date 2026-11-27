@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -103,6 +105,7 @@ fun WeeklyScheduleScreen(
     onNavigate: (Destination) -> Unit,
     onBack: () -> Unit,
     onNavHideFractionChanged: (Float) -> Unit = {},
+    hasSharedWallpaper: Boolean = false,
     viewModel: WeeklyScheduleViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -149,12 +152,12 @@ fun WeeklyScheduleScreen(
     var isGridHolding by remember { mutableStateOf(false) }
     var selectedBlockForDetail by remember { mutableStateOf<MergedCourseBlock?>(null) }
 
-    val hasWallpaper = uiState.wallpaperVisuals.hasWallpaper
-    val composedStyle by remember(uiState.style, uiState.wallpaperVisuals) {
+    val hasWallpaper = hasSharedWallpaper || uiState.wallpaperVisuals.hasWallpaper
+    val composedStyle by remember(uiState.style, uiState.wallpaperVisuals, hasWallpaper) {
         derivedStateOf {
             with(ScheduleGridStyleComposed) {
                 uiState.style.toComposedStyle(
-                    hasWallpaper = uiState.wallpaperVisuals.hasWallpaper,
+                    hasWallpaper = hasWallpaper,
                     glassEnabled = uiState.wallpaperVisuals.glassEnabled,
                     cardFrost = uiState.wallpaperVisuals.cardFrost
                 )
@@ -233,7 +236,7 @@ fun WeeklyScheduleScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().then(screenBgModifier)) {
-        if (hasWallpaper) {
+        if (!hasSharedWallpaper && uiState.wallpaperVisuals.hasWallpaper) {
             ScheduleWallpaperBackdrop(visuals = uiState.wallpaperVisuals)
         }
 
@@ -249,7 +252,14 @@ fun WeeklyScheduleScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(14.dp))
+                                .then(
+                                    if (hasWallpaper) {
+                                        Modifier.background(Color.Black.copy(alpha = 0.18f))
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                                 .clickable {
                                     if (!uiState.isSemesterSet || uiState.semesterStartDate == null) {
                                         onNavigate(Destination.Settings)
@@ -257,11 +267,11 @@ fun WeeklyScheduleScreen(
                                         showWeekSelector = true
                                     }
                                 }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = displayTitle,
-                                fontSize = 22.sp,
+                                fontSize = 21.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = titleTextColor,
                                 style = TextStyle(shadow = headerShadow)
@@ -276,26 +286,56 @@ fun WeeklyScheduleScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onNavigate(Destination.AddEditCourse()) }) {
-                            Icon(
-                                imageVector = vectorResource(Res.drawable.add_24px),
-                                contentDescription = "添加课程",
-                                tint = customTextColor
-                            )
-                        }
-                        IconButton(onClick = { onNavigate(Destination.ThemeSettings) }) {
-                            Icon(
-                                imageVector = vectorResource(Res.drawable.contrast_24px),
-                                contentDescription = "主题与深色模式",
-                                tint = customTextColor
-                            )
-                        }
-                        IconButton(onClick = { showTableSwitcher = true }) {
-                            Icon(
-                                imageVector = vectorResource(Res.drawable.swap_horiz_24px),
-                                contentDescription = stringResource(Res.string.action_select_table),
-                                tint = customTextColor
-                            )
+                        val iconBtnBg = if (hasWallpaper) Color.Black.copy(alpha = 0.22f) else Color.Transparent
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Surface(
+                                onClick = { onNavigate(Destination.AddEditCourse()) },
+                                shape = CircleShape,
+                                color = iconBtnBg,
+                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = vectorResource(Res.drawable.add_24px),
+                                        contentDescription = "添加课程",
+                                        tint = customTextColor,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
+                            }
+                            Surface(
+                                onClick = { onNavigate(Destination.ThemeSettings) },
+                                shape = CircleShape,
+                                color = iconBtnBg,
+                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = vectorResource(Res.drawable.contrast_24px),
+                                        contentDescription = "主题与深色模式",
+                                        tint = customTextColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Surface(
+                                onClick = { showTableSwitcher = true },
+                                shape = CircleShape,
+                                color = iconBtnBg,
+                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = vectorResource(Res.drawable.swap_horiz_24px),
+                                        contentDescription = stringResource(Res.string.action_select_table),
+                                        tint = customTextColor,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

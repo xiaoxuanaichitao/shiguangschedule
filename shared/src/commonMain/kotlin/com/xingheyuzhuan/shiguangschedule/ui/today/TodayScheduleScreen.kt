@@ -100,6 +100,7 @@ private const val DEFAULT_OVERDUE_DAYS = 1
 fun TodayScheduleScreen(
     onNavigate: (Destination) -> Unit,
     onBack: () -> Unit,
+    hasSharedWallpaper: Boolean = false,
     viewModel: TodayScheduleViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -112,7 +113,12 @@ fun TodayScheduleScreen(
         viewModel.updateDarkTheme(isDark)
     }
 
-    val hasWallpaper = wallpaperVisuals.hasWallpaper
+    val hasWallpaper = hasSharedWallpaper || wallpaperVisuals.hasWallpaper
+    val effectiveVisuals = if (hasSharedWallpaper && !wallpaperVisuals.hasWallpaper) {
+        wallpaperVisuals.copy(wallpaperPath = "__shared__")
+    } else {
+        wallpaperVisuals
+    }
     val customPageColor = gridStyle.pageTextColorLong?.let { Color(it) }
     val headerTitleColor = customPageColor ?: if (hasWallpaper) Color.White else MaterialTheme.colorScheme.onSurface
     val headerShadow = if (hasWallpaper && customPageColor == null) WallpaperHeaderTextShadow else null
@@ -130,7 +136,7 @@ fun TodayScheduleScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().then(fallbackBgModifier)) {
-        if (hasWallpaper) {
+        if (!hasSharedWallpaper && wallpaperVisuals.hasWallpaper) {
             ScheduleWallpaperBackdrop(visuals = wallpaperVisuals)
         }
 
@@ -165,7 +171,7 @@ fun TodayScheduleScreen(
                         TodayContent(
                             state = state,
                             gridStyle = gridStyle,
-                            wallpaperVisuals = wallpaperVisuals,
+                            wallpaperVisuals = effectiveVisuals,
                             isDark = isDark,
                             upcomingExamHint = upcomingExamHint,
                             onExamHintClick = { onNavigate(Destination.CumtExams) }
@@ -397,9 +403,9 @@ fun CourseTimelineItem(
     }
     val themeColor = if (isDark && !hasWallpaper) colorPair.dark else colorPair.light
     val effectiveAlpha = if (hasWallpaper && !gridStyle.hasCustomAlpha) {
-        0.78f
+        0.82f
     } else {
-        gridStyle.courseBlockAlphaFloat
+        gridStyle.courseBlockAlphaFloat.coerceAtLeast(if (hasWallpaper) 0.55f else 0.15f)
     }
     val cardCorner = gridStyle.courseBlockCornerRadiusDp.coerceAtLeast(14f).dp
 
@@ -415,7 +421,7 @@ fun CourseTimelineItem(
     val customPageColor = gridStyle.pageTextColorLong?.let { Color(it) }
     val timePrimaryColor = customPageColor ?: if (hasWallpaper) Color.White else MaterialTheme.colorScheme.onSurface
     val timeSecondaryColor = if (hasWallpaper && customPageColor == null) {
-        Color.White.copy(alpha = 0.80f)
+        Color.White.copy(alpha = 0.84f)
     } else {
         customPageColor?.copy(alpha = 0.70f) ?: MaterialTheme.colorScheme.outline
     }
@@ -424,7 +430,13 @@ fun CourseTimelineItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer(alpha = if (isFinished) 0.56f else 1f)
+            .graphicsLayer(
+                alpha = when {
+                    !isFinished -> 1f
+                    hasWallpaper -> 0.86f
+                    else -> 0.56f
+                }
+            )
     ) {
         Column(
             modifier = Modifier.width(64.dp).padding(top = 4.dp),
@@ -454,7 +466,11 @@ fun CourseTimelineItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .scheduleGlassCardSurface(
-                        baseColor = themeColor,
+                        baseColor = if (isFinished && hasWallpaper) {
+                            androidx.compose.ui.graphics.lerp(themeColor, Color(0xFF2B3442), 0.35f)
+                        } else {
+                            themeColor
+                        },
                         alpha = effectiveAlpha,
                         cornerRadius = cardCorner,
                         hasWallpaper = hasWallpaper,
@@ -463,16 +479,29 @@ fun CourseTimelineItem(
                     )
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                    Text(
-                        text = model.course.name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            textDecoration = if (isFinished) TextDecoration.LineThrough else null,
-                            shadow = cardTextShadow
-                        ),
-                        fontWeight = FontWeight.Bold,
-                        color = cardTextColor,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = model.course.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                textDecoration = if (isFinished) TextDecoration.LineThrough else null,
+                                shadow = cardTextShadow
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = cardTextColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isFinished) {
+                            CumtStatusPill(
+                                text = "已结束",
+                                containerColor = Color.Black.copy(alpha = 0.22f),
+                                contentColor = cardTextColor.copy(alpha = 0.92f)
+                            )
+                        }
+                    }
 
                     if (model.course.position.isNotBlank()) {
                         Text(

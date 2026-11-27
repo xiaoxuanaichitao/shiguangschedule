@@ -69,6 +69,7 @@ import com.xingheyuzhuan.shiguangschedule.cumt.CumtLocalRepository
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtScoreItem
 import com.xingheyuzhuan.shiguangschedule.cumt.CumtServiceRepository
 import com.xingheyuzhuan.shiguangschedule.ui.components.ToastManager
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperHeaderTextShadow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -219,6 +220,7 @@ private fun formatDecimal(value: Double): String {
 @Composable
 fun CampusDiscoverScreen(
     onNavigate: (Destination) -> Unit,
+    hasSharedWallpaper: Boolean = false,
     viewModel: CampusDiscoverViewModel = koinViewModel()
 ) {
     val profile by viewModel.profile.collectAsState()
@@ -316,11 +318,35 @@ fun CampusDiscoverScreen(
         )
     )
 
+    val cardBgColor = if (hasSharedWallpaper) {
+        MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val cardBorderColor = if (hasSharedWallpaper) {
+        Color.White.copy(alpha = 0.36f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+    }
+
     Scaffold(
+        containerColor = if (hasSharedWallpaper) Color.Transparent else MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("矿大校园", fontWeight = FontWeight.ExtraBold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                title = {
+                    Text(
+                        text = "矿大校园",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (hasSharedWallpaper) Color.White else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            shadow = if (hasSharedWallpaper) WallpaperHeaderTextShadow else null
+                        )
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                )
             )
         }
     ) { paddingValues ->
@@ -444,6 +470,8 @@ fun CampusDiscoverScreen(
                 ) {
                     CumtSurfaceCard(
                         onClick = { onNavigate(Destination.CumtCampusCard) },
+                        containerColor = cardBgColor,
+                        borderColor = cardBorderColor,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -514,6 +542,8 @@ fun CampusDiscoverScreen(
 
                     CumtSurfaceCard(
                         onClick = { onNavigate(Destination.CumtDormPower) },
+                        containerColor = cardBgColor,
+                        borderColor = cardBorderColor,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -605,6 +635,8 @@ fun CampusDiscoverScreen(
             item {
                 CumtSurfaceCard(
                     onClick = { onNavigate(Destination.CumtAiCourseImport) },
+                    containerColor = cardBgColor,
+                    borderColor = cardBorderColor,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -735,10 +767,26 @@ fun CampusDiscoverScreen(
 
             // 校园功能网格标题
             item {
-                CumtSectionHeader(
-                    title = "矿大百宝箱",
-                    subtitle = "点击直达校内教务与生活服务"
-                )
+                if (hasSharedWallpaper) {
+                    Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+                        Text(
+                            text = "矿大百宝箱",
+                            style = MaterialTheme.typography.titleMedium.copy(shadow = WallpaperHeaderTextShadow),
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "点击直达校内教务与生活服务",
+                            style = MaterialTheme.typography.labelSmall.copy(shadow = WallpaperHeaderTextShadow),
+                            color = Color.White.copy(alpha = 0.86f)
+                        )
+                    }
+                } else {
+                    CumtSectionHeader(
+                        title = "矿大百宝箱",
+                        subtitle = "点击直达校内教务与生活服务"
+                    )
+                }
             }
 
             // 两列卡片网格
@@ -752,6 +800,8 @@ fun CampusDiscoverScreen(
                     pair.forEach { tool ->
                         DiscoverToolCard(
                             item = tool,
+                            containerColor = cardBgColor,
+                            borderColor = cardBorderColor,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -793,10 +843,14 @@ fun CampusDiscoverScreen(
 @Composable
 private fun DiscoverToolCard(
     item: DiscoverToolItem,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
     modifier: Modifier = Modifier
 ) {
     CumtSurfaceCard(
         onClick = item.onClick,
+        containerColor = containerColor,
+        borderColor = borderColor,
         modifier = modifier
     ) {
         Column(modifier = Modifier.padding(14.dp)) {

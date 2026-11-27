@@ -53,7 +53,7 @@ data class ScheduleGridStyleComposed(
 
     // 自定义壁纸联动视觉属性
     val hasWallpaper: Boolean = false,
-    val glassEnabled: Boolean = true,
+    val glassEnabled: Boolean = false,
     val cardFrost: Float = 0.28f,
 ) {
     /** 壁纸模式下若用户从未手动改过卡片不透明度，自动采用 0.76f 通透毛玻璃比例；一旦用户手动拖动滑块则严格遵循用户设定 */
@@ -66,7 +66,7 @@ data class ScheduleGridStyleComposed(
          */
         fun ScheduleGridStyle.toComposedStyle(
             hasWallpaper: Boolean = false,
-            glassEnabled: Boolean = true,
+            glassEnabled: Boolean = false,
             cardFrost: Float = 0.28f
         ): ScheduleGridStyleComposed {
             return ScheduleGridStyleComposed(

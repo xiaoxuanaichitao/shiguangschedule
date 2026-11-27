@@ -209,6 +209,8 @@ fun SettingsListContent(
             onCardFrostChange = viewModel::updateWallpaperCardFrost,
             onDimChange = viewModel::updateWallpaperDim,
             onGlassEnabledChange = viewModel::updateWallpaperGlassEnabled,
+            onSyncCampusChange = viewModel::updateWallpaperSyncCampus,
+            onSyncSettingsChange = viewModel::updateWallpaperSyncSettings,
             onApplyRecent = { path -> viewModel.applyRecentWallpaper(path, isPreviewDark) }
         )
 
@@ -345,6 +347,8 @@ private fun WallpaperGlassStudioSection(
     onCardFrostChange: (Float) -> Unit,
     onDimChange: (Float) -> Unit,
     onGlassEnabledChange: (Boolean) -> Unit,
+    onSyncCampusChange: (Boolean) -> Unit,
+    onSyncSettingsChange: (Boolean) -> Unit,
     onApplyRecent: (String) -> Unit
 ) {
     // 1. 毛玻璃与通透度实时滑块卡
@@ -397,12 +401,12 @@ private fun WallpaperGlassStudioSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "液态玻璃高光质感",
+                        text = "液态玻璃质感（性能要求较高）",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "开启卡片镜面高光内描边与斜向微折射柔光",
+                        text = "默认关闭以保持高帧流畅；开启后增加镜面渐变描边与斜向高光",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -410,6 +414,54 @@ private fun WallpaperGlassStudioSection(
                 Switch(
                     checked = appSettings.wallpaperGlassEnabled,
                     onCheckedChange = onGlassEnabledChange
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "同步壁纸到「校园」页面",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "开启后校园主页自动沿用当前壁纸与磨砂卡片",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = appSettings.wallpaperSyncCampus,
+                    onCheckedChange = onSyncCampusChange
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "同步壁纸到「我的 / 设置」页面",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "周课表与今日课表始终同步，此处控制设置页是否同步",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = appSettings.wallpaperSyncSettings,
+                    onCheckedChange = onSyncSettingsChange
                 )
             }
         }

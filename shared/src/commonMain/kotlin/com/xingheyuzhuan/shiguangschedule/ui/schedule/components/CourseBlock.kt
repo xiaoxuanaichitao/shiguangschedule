@@ -75,7 +75,7 @@ fun CourseBlock(
 
     // 字体大小
     val sTitle = (11.5f * style.fontScale).sp
-    val sSub = (9.2f * style.fontScale).sp
+    val sSub = (8.8f * style.fontScale).sp
     val sTime = (9f * style.fontScale).sp
 
     // 核心分支逻辑：判断 24小时模式 与 节次模式 的时间文本渲染

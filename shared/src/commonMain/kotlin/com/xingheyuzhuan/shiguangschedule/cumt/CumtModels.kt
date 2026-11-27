@@ -358,60 +358,43 @@ enum class CumtAiProviderPreset(
     val protocol: CumtAiProtocol,
     val defaultBaseUrl: String,
     val defaultModel: String,
-    val hint: String
+    val hint: String = ""
 ) {
-    SILICONFLOW(
-        id = "siliconflow",
-        displayName = "硅基流动",
+    DEEPSEEK(
+        id = "deepseek",
+        displayName = "DeepSeek",
         protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
-        defaultBaseUrl = "https://api.siliconflow.cn/v1",
-        defaultModel = "Qwen/Qwen2.5-VL-72B-Instruct",
-        hint = "国内直连，Qwen2.5-VL 识别中文实验排表准确度高"
-    ),
-    QWEN_DASHSCOPE(
-        id = "dashscope",
-        displayName = "阿里百炼",
-        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
-        defaultBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        defaultModel = "qwen-vl-max",
-        hint = "阿里云通义千问视觉大模型（OpenAI 兼容）"
-    ),
-    ZHIPU(
-        id = "zhipu",
-        displayName = "智谱 GLM",
-        protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
-        defaultBaseUrl = "https://open.bigmodel.cn/api/paas/v4",
-        defaultModel = "glm-4v-flash",
-        hint = "GLM-4V-Flash 免费额度友好，国内直连"
-    ),
-    GEMINI(
-        id = "gemini",
-        displayName = "Gemini",
-        protocol = CumtAiProtocol.GEMINI,
-        defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
-        defaultModel = "gemini-2.5-flash",
-        hint = "Google 原生多模态接口，表格与红框标注识别优秀"
+        defaultBaseUrl = "https://api.deepseek.com/v1",
+        defaultModel = "deepseek-chat"
     ),
     OPENAI(
         id = "openai",
         displayName = "OpenAI",
         protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
         defaultBaseUrl = "https://api.openai.com/v1",
-        defaultModel = "gpt-4o-mini",
-        hint = "OpenAI 官方视觉接口"
+        defaultModel = "gpt-4o-mini"
+    ),
+    GEMINI(
+        id = "gemini",
+        displayName = "Gemini",
+        protocol = CumtAiProtocol.GEMINI,
+        defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+        defaultModel = "gemini-2.5-flash"
     ),
     CUSTOM(
         id = "custom",
         displayName = "自定义",
         protocol = CumtAiProtocol.OPENAI_COMPATIBLE,
         defaultBaseUrl = "",
-        defaultModel = "",
-        hint = "兼容豆包 / OneAPI / NewAPI 等任意支持视觉的模型端点"
+        defaultModel = ""
     );
 
     companion object {
         fun fromId(id: String?): CumtAiProviderPreset =
-            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: SILICONFLOW
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: when {
+                id.isNullOrBlank() -> DEEPSEEK
+                else -> CUSTOM
+            }
     }
 }
 
@@ -437,10 +420,11 @@ enum class CumtAiOrbIconStyle(val id: String, val label: String) {
 
 @Serializable
 data class CumtAiConfig(
-    val providerId: String = CumtAiProviderPreset.SILICONFLOW.id,
-    val baseUrl: String = CumtAiProviderPreset.SILICONFLOW.defaultBaseUrl,
-    val model: String = CumtAiProviderPreset.SILICONFLOW.defaultModel,
-    val protocol: String = CumtAiProviderPreset.SILICONFLOW.protocol.name,
+    val providerId: String = CumtAiProviderPreset.DEEPSEEK.id,
+    val providerName: String = CumtAiProviderPreset.DEEPSEEK.displayName,
+    val baseUrl: String = CumtAiProviderPreset.DEEPSEEK.defaultBaseUrl,
+    val model: String = CumtAiProviderPreset.DEEPSEEK.defaultModel,
+    val protocol: String = CumtAiProviderPreset.DEEPSEEK.protocol.name,
     val hasApiKey: Boolean = false,
     val floatingOrbEnabled: Boolean = true,
     val floatingOrbYFraction: Float = 0.72f,
@@ -455,6 +439,9 @@ data class CumtAiConfig(
 ) {
     val presetEnum: CumtAiProviderPreset
         get() = CumtAiProviderPreset.fromId(providerId)
+
+    val effectiveDisplayName: String
+        get() = providerName.ifBlank { presetEnum.displayName }
 
     val protocolEnum: CumtAiProtocol
         get() = CumtAiProtocol.fromName(protocol)
@@ -480,6 +467,7 @@ data class CumtAiRecognizedCourse(
 @Serializable
 data class CumtAiProviderSlot(
     val providerId: String,
+    val displayName: String = "",
     val baseUrl: String = "",
     val model: String = "",
     val protocol: String = CumtAiProtocol.OPENAI_COMPATIBLE.name,
@@ -487,7 +475,13 @@ data class CumtAiProviderSlot(
     val iv: String = "",
     val plainFallbackKey: String = "",
     val cachedModels: List<CumtAiModelInfo> = emptyList()
-)
+) {
+    val hasKey: Boolean
+        get() = encryptedApiKey.isNotEmpty() || plainFallbackKey.isNotEmpty()
+
+    val effectiveName: String
+        get() = displayName.ifBlank { CumtAiProviderPreset.fromId(providerId).displayName }
+}
 
 @Serializable
 enum class CumtAiActionStatus {

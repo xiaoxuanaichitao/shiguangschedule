@@ -270,7 +270,7 @@ fun CumtAiFloatingOverlay(
                             )
                             Text(
                                 text = if (aiConfig.hasApiKey) {
-                                    "${aiConfig.presetEnum.displayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
+                                    "${aiConfig.effectiveDisplayName} · ${aiConfig.model.ifBlank { "未选模型" }}"
                                 } else {
                                     "尚未配置 API Key · 点击右侧进入设置"
                                 },

@@ -8,6 +8,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
@@ -45,6 +47,8 @@ import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSchoolBusScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreMappingScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreScreen
 import com.xingheyuzhuan.shiguangschedule.ui.schedule.WeeklyScheduleScreen
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleWallpaperBackdrop
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperVisualConfig
 import com.xingheyuzhuan.shiguangschedule.ui.schoolselection.web.WebViewScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsScreen
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
@@ -156,33 +160,78 @@ fun AppNavigation(
     } else {
         appSettings.backgroundImagePath.light.ifEmpty { appSettings.backgroundImagePath.dark }
     }
-    val useFrostedNavDock = (currentDestination == Destination.CourseSchedule || currentDestination == Destination.TodaySchedule) &&
-        activeWallpaperRaw.isNotBlank()
+    val sharedWallpaperVisuals = remember(
+        activeWallpaperRaw,
+        appSettings.wallpaperBlurDp,
+        appSettings.wallpaperDimAlpha,
+        appSettings.wallpaperGlassEnabled,
+        appSettings.wallpaperCardFrost
+    ) {
+        WallpaperVisualConfig(
+            wallpaperPath = activeWallpaperRaw.ifBlank { null },
+            blurDp = appSettings.wallpaperBlurDp,
+            dimAlpha = appSettings.wallpaperDimAlpha,
+            glassEnabled = appSettings.wallpaperGlassEnabled,
+            cardFrost = appSettings.wallpaperCardFrost
+        )
+    }
+
+    fun isSyncedWithWallpaper(dest: Destination): Boolean {
+        if (!sharedWallpaperVisuals.hasWallpaper) return false
+        return when (dest) {
+            Destination.CourseSchedule, Destination.TodaySchedule -> true
+            Destination.CampusDiscover -> appSettings.wallpaperSyncCampus
+            Destination.Settings -> appSettings.wallpaperSyncSettings
+            else -> false
+        }
+    }
+
+    val currentUsesSharedWallpaper = isSyncedWithWallpaper(currentDestination)
 
     SyncImmersiveStatusBarIcons(
-        forceLightContent = useFrostedNavDock,
+        forceLightContent = currentUsesSharedWallpaper,
         darkTheme = isDark
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // 全局常驻底层共享壁纸层：切 Tab 时绝不销毁重建，彻底消除闪屏与壁纸跟随横滑
+        if (sharedWallpaperVisuals.hasWallpaper) {
+            ScheduleWallpaperBackdrop(
+                visuals = sharedWallpaperVisuals,
+                showLeftAxisScrim = currentDestination == Destination.CourseSchedule || currentDestination == Destination.TodaySchedule
+            )
+        }
+
         AdaptiveNavigationScaffold(
             currentDestination = currentDestination,
             onTabSelected = onNavigate,
             showNavigation = currentDestination.isMainScreen,
             navHideFractionProvider = { navHideFraction },
-            isFrostedGlass = useFrostedNavDock
+            isFrostedGlass = currentUsesSharedWallpaper
         ) { _ ->
             NavDisplay(
                 backStack = backStack,
                 onBack = onBack,
                 modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
-                    slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
-                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
+                    val fromMain = (initialState.key as? Destination)?.isMainScreen == true
+                    val toMain = (targetState.key as? Destination)?.isMainScreen == true
+                    if (fromMain && toMain) {
+                        fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(110))
+                    } else {
+                        slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
+                                slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
+                    }
                 },
                 popTransitionSpec = {
-                    slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
-                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
+                    val fromMain = (initialState.key as? Destination)?.isMainScreen == true
+                    val toMain = (targetState.key as? Destination)?.isMainScreen == true
+                    if (fromMain && toMain) {
+                        fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(110))
+                    } else {
+                        slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
+                    }
                 },
                 predictivePopTransitionSpec = {
                     slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
@@ -194,6 +243,7 @@ fun AppNavigation(
                 )
             ) { key ->
                 val destination = key as Destination
+                val entryUsesWallpaper = isSyncedWithWallpaper(destination)
 
                 NavEntry(
                     key = key,
@@ -201,12 +251,16 @@ fun AppNavigation(
                         put(ShiguangNavMetadata.IsMainScreenKey, destination.isMainScreen)
                     }
                 ) {
-                    Surface(modifier = Modifier.fillMaxSize()) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = if (entryUsesWallpaper) Color.Transparent else MaterialTheme.colorScheme.background
+                    ) {
                         ScreenContent(
                             targetDest = destination,
                             onNavigate = onNavigate,
                             onBack = onBack,
-                            onNavHideFractionChanged = { navHideFraction = it }
+                            onNavHideFractionChanged = { navHideFraction = it },
+                            hasSharedWallpaper = entryUsesWallpaper
                         )
                     }
                 }
@@ -226,17 +280,30 @@ fun ScreenContent(
     targetDest: Destination,
     onNavigate: (Destination) -> Unit,
     onBack: () -> Unit,
-    onNavHideFractionChanged: (Float) -> Unit
+    onNavHideFractionChanged: (Float) -> Unit,
+    hasSharedWallpaper: Boolean = false
 ) {
     when (targetDest) {
         Destination.CourseSchedule -> WeeklyScheduleScreen(
             onNavigate = onNavigate,
             onBack = onBack,
-            onNavHideFractionChanged = onNavHideFractionChanged
+            onNavHideFractionChanged = onNavHideFractionChanged,
+            hasSharedWallpaper = hasSharedWallpaper
         )
-        Destination.CampusDiscover -> CampusDiscoverScreen(onNavigate)
-        Destination.Settings -> SettingsScreen(onNavigate, onBack)
-        Destination.TodaySchedule -> TodayScheduleScreen(onNavigate, onBack)
+        Destination.CampusDiscover -> CampusDiscoverScreen(
+            onNavigate = onNavigate,
+            hasSharedWallpaper = hasSharedWallpaper
+        )
+        Destination.Settings -> SettingsScreen(
+            onNavigate = onNavigate,
+            onBack = onBack,
+            hasSharedWallpaper = hasSharedWallpaper
+        )
+        Destination.TodaySchedule -> TodayScheduleScreen(
+            onNavigate = onNavigate,
+            onBack = onBack,
+            hasSharedWallpaper = hasSharedWallpaper
+        )
         Destination.ManageCourseTables -> ManageCourseTablesScreen(onBack)
         Destination.CourseTableConversion -> CourseTableConversionScreen(onNavigate, onBack)
         Destination.NotificationSettings -> NotificationSettingsScreen(onBack)

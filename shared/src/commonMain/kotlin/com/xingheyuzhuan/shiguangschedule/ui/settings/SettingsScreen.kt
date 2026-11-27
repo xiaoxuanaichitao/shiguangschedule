@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,7 @@ import com.xingheyuzhuan.shiguangschedule.ui.components.NativeNumberPicker
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSectionHeader
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSegmentedBar
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSurfaceCard
+import com.xingheyuzhuan.shiguangschedule.ui.schedule.components.WallpaperHeaderTextShadow
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -118,21 +120,42 @@ private val ITEM_SPACING = 16.dp
 fun SettingsScreen(
     onNavigate: (Destination) -> Unit,
     onBack: () -> Unit,
+    hasSharedWallpaper: Boolean = false,
     viewModel: SettingsViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val cardBgColor = if (hasSharedWallpaper) {
+        MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.82f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val cardBorderColor = if (hasSharedWallpaper) {
+        Color.White.copy(alpha = 0.34f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = if (hasSharedWallpaper) Color.Transparent else MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(Res.string.title_schedule_settings)) },
+                title = {
+                    Text(
+                        text = stringResource(Res.string.title_schedule_settings),
+                        color = if (hasSharedWallpaper) Color.White else MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (hasSharedWallpaper) FontWeight.ExtraBold else FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            shadow = if (hasSharedWallpaper) WallpaperHeaderTextShadow else null
+                        )
+                    )
+                },
                 scrollBehavior = scrollBehavior,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                    containerColor = if (hasSharedWallpaper) Color.Transparent else MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = if (hasSharedWallpaper) Color.Black.copy(alpha = 0.24f) else MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -179,7 +202,9 @@ fun SettingsScreen(
                     AppearanceQuickSection(
                         selectedThemeMode = appSettings.themeMode,
                         onThemeModeSelected = viewModel::onThemeModeChanged,
-                        onThemeSettingsClick = { onNavigate(Destination.ThemeSettings) }
+                        onThemeSettingsClick = { onNavigate(Destination.ThemeSettings) },
+                        cardBgColor = cardBgColor,
+                        cardBorderColor = cardBorderColor
                     )
                 }
                 item {
@@ -196,11 +221,17 @@ fun SettingsScreen(
                         onSemesterTotalWeeksClick = { showTotalWeeksDialog = true },
                         onManualWeekClick = { showManualWeekDialog = true },
                         onFirstDayOfWeekClick = { showFirstDayOfWeekDialog = true },
-                        onQuickActionsClick = { onNavigate(Destination.QuickActions) }
+                        onQuickActionsClick = { onNavigate(Destination.QuickActions) },
+                        cardBgColor = cardBgColor,
+                        cardBorderColor = cardBorderColor
                     )
                 }
                 item {
-                    AdvancedSettingsSection(onNavigate = onNavigate)
+                    AdvancedSettingsSection(
+                        onNavigate = onNavigate,
+                        cardBgColor = cardBgColor,
+                        cardBorderColor = cardBorderColor
+                    )
                 }
             }
 
@@ -284,9 +315,15 @@ fun SettingsScreen(
 private fun AppearanceQuickSection(
     selectedThemeMode: AppThemeMode,
     onThemeModeSelected: (AppThemeMode) -> Unit,
-    onThemeSettingsClick: () -> Unit
+    onThemeSettingsClick: () -> Unit,
+    cardBgColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    cardBorderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
 ) {
-    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+    CumtSurfaceCard(
+        containerColor = cardBgColor,
+        borderColor = cardBorderColor,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(
             modifier = Modifier.padding(SETTING_PADDING),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -328,9 +365,15 @@ private fun GeneralSettingsSection(
     onSemesterTotalWeeksClick: () -> Unit,
     onManualWeekClick: () -> Unit,
     onFirstDayOfWeekClick: () -> Unit,
-    onQuickActionsClick: () -> Unit
+    onQuickActionsClick: () -> Unit,
+    cardBgColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    cardBorderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
 ) {
-    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+    CumtSurfaceCard(
+        containerColor = cardBgColor,
+        borderColor = cardBorderColor,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(
             modifier = Modifier.padding(SETTING_PADDING),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -429,8 +472,16 @@ private fun GeneralSettingsSection(
  * 高级功能卡片
  */
 @Composable
-private fun AdvancedSettingsSection(onNavigate: (Destination) -> Unit) {
-    CumtSurfaceCard(modifier = Modifier.fillMaxWidth()) {
+private fun AdvancedSettingsSection(
+    onNavigate: (Destination) -> Unit,
+    cardBgColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    cardBorderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+) {
+    CumtSurfaceCard(
+        containerColor = cardBgColor,
+        borderColor = cardBorderColor,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(
             modifier = Modifier.padding(SETTING_PADDING),
             verticalArrangement = Arrangement.spacedBy(12.dp)

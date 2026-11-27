@@ -165,14 +165,20 @@ data class AppSettingsModel(
     /** 背景壁纸护眼压暗遮罩浓度（0f~0.55f） */
     val wallpaperDimAlpha: Float = 0.06f,
 
-    /** 是否开启课程卡片液态毛玻璃高光质感（镜面折射边框与斜向柔光） */
-    val wallpaperGlassEnabled: Boolean = true,
+    /** 是否开启课程卡片液态毛玻璃高光质感（默认关闭，保持最高帧率流畅度） */
+    val wallpaperGlassEnabled: Boolean = false,
 
     /** 课程卡片背景柔雾防花底浓度（0f~0.85f，解决花哨壁纸下卡片文字发花问题） */
     val wallpaperCardFrost: Float = 0.28f,
 
     /** 最近从相册选择的壁纸历史（最多保留最近 3 张） */
     val recentWallpapers: List<String> = emptyList(),
+
+    /** 自定义壁纸是否同步应用到「校园」页面 */
+    val wallpaperSyncCampus: Boolean = false,
+
+    /** 自定义壁纸是否同步应用到「我的 / 设置」页面 */
+    val wallpaperSyncSettings: Boolean = false,
 
     /** 开发者功能总开关（默认关闭） */
     val developerModeEnabled: Boolean = false,
@@ -222,12 +228,16 @@ data class AppSettingsModel(
         val KEY_WALLPAPER_BLUR_DP = floatPreferencesKey("wallpaper_blur_dp")
         /** 壁纸压暗遮罩浓度存储键 */
         val KEY_WALLPAPER_DIM_ALPHA = floatPreferencesKey("wallpaper_dim_alpha")
-        /** 卡片液态玻璃质感开关存储键 */
-        val KEY_WALLPAPER_GLASS_ENABLED = booleanPreferencesKey("wallpaper_glass_enabled")
+        /** 卡片液态玻璃质感开关存储键（默认关闭） */
+        val KEY_WALLPAPER_GLASS_ENABLED = booleanPreferencesKey("wallpaper_liquid_glass_enabled")
         /** 卡片柔雾防花底浓度存储键 */
         val KEY_WALLPAPER_CARD_FROST = floatPreferencesKey("wallpaper_card_frost")
         /** 最近三张壁纸 JSON 列表存储键 */
         val KEY_RECENT_WALLPAPERS_JSON = stringPreferencesKey("recent_wallpapers_json")
+        /** 壁纸是否同步到校园页存储键 */
+        val KEY_WALLPAPER_SYNC_CAMPUS = booleanPreferencesKey("wallpaper_sync_campus")
+        /** 壁纸是否同步到设置页存储键 */
+        val KEY_WALLPAPER_SYNC_SETTINGS = booleanPreferencesKey("wallpaper_sync_settings")
         /** 开发者模式总开关的存储键 */
         val KEY_DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
         /** 软件全局界面字号倍率的存储键 */
@@ -293,6 +303,8 @@ data class AppSettingsModel(
                 wallpaperGlassEnabled = prefs[KEY_WALLPAPER_GLASS_ENABLED] ?: d.wallpaperGlassEnabled,
                 wallpaperCardFrost = (prefs[KEY_WALLPAPER_CARD_FROST] ?: d.wallpaperCardFrost).coerceIn(0f, 0.85f),
                 recentWallpapers = parsedRecents.filter { it.isNotBlank() }.distinct().take(3),
+                wallpaperSyncCampus = prefs[KEY_WALLPAPER_SYNC_CAMPUS] ?: d.wallpaperSyncCampus,
+                wallpaperSyncSettings = prefs[KEY_WALLPAPER_SYNC_SETTINGS] ?: d.wallpaperSyncSettings,
                 developerModeEnabled = prefs[KEY_DEVELOPER_MODE_ENABLED] ?: d.developerModeEnabled,
                 appUiFontScale = (prefs[KEY_APP_UI_FONT_SCALE] ?: d.appUiFontScale).coerceIn(0.85f, 1.25f),
             )

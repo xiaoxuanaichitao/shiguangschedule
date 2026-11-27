@@ -285,6 +285,14 @@ class StyleSettingsViewModel(
         appSettingsRepository.updateWallpaperVisuals(cardFrost = frost)
     }
 
+    fun updateWallpaperSyncSchedule(sync: Boolean) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(syncSchedule = sync)
+    }
+
+    fun updateWallpaperSyncToday(sync: Boolean) = viewModelScope.launch {
+        appSettingsRepository.updateWallpaperVisuals(syncToday = sync)
+    }
+
     fun updateWallpaperSyncCampus(sync: Boolean) = viewModelScope.launch {
         appSettingsRepository.updateWallpaperVisuals(syncCampus = sync)
     }

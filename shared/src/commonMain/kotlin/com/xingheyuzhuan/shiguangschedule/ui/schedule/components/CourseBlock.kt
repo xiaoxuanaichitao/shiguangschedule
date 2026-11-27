@@ -219,7 +219,9 @@ fun CourseBlock(
             }
 
             if (showLocation) {
-                val formattedPos = formatCourseLocationCompact(course.position, style.removeLocationAt)
+                val formattedPos = androidx.compose.runtime.remember(course.position, style.removeLocationAt) {
+                    formatCourseLocationCompact(course.position, style.removeLocationAt)
+                }
                 Text(
                     text = formattedPos,
                     fontSize = sSub,

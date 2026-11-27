@@ -174,6 +174,12 @@ data class AppSettingsModel(
     /** 最近从相册选择的壁纸历史（最多保留最近 3 张） */
     val recentWallpapers: List<String> = emptyList(),
 
+    /** 自定义壁纸是否同步应用到「周课表」页面 */
+    val wallpaperSyncSchedule: Boolean = true,
+
+    /** 自定义壁纸是否同步应用到「今日课表」页面 */
+    val wallpaperSyncToday: Boolean = true,
+
     /** 自定义壁纸是否同步应用到「校园」页面 */
     val wallpaperSyncCampus: Boolean = false,
 
@@ -234,6 +240,10 @@ data class AppSettingsModel(
         val KEY_WALLPAPER_CARD_FROST = floatPreferencesKey("wallpaper_card_frost")
         /** 最近三张壁纸 JSON 列表存储键 */
         val KEY_RECENT_WALLPAPERS_JSON = stringPreferencesKey("recent_wallpapers_json")
+        /** 壁纸是否同步到周课表存储键 */
+        val KEY_WALLPAPER_SYNC_SCHEDULE = booleanPreferencesKey("wallpaper_sync_schedule")
+        /** 壁纸是否同步到今日课表存储键 */
+        val KEY_WALLPAPER_SYNC_TODAY = booleanPreferencesKey("wallpaper_sync_today")
         /** 壁纸是否同步到校园页存储键 */
         val KEY_WALLPAPER_SYNC_CAMPUS = booleanPreferencesKey("wallpaper_sync_campus")
         /** 壁纸是否同步到设置页存储键 */
@@ -303,6 +313,8 @@ data class AppSettingsModel(
                 wallpaperGlassEnabled = prefs[KEY_WALLPAPER_GLASS_ENABLED] ?: d.wallpaperGlassEnabled,
                 wallpaperCardFrost = (prefs[KEY_WALLPAPER_CARD_FROST] ?: d.wallpaperCardFrost).coerceIn(0f, 0.85f),
                 recentWallpapers = parsedRecents.filter { it.isNotBlank() }.distinct().take(3),
+                wallpaperSyncSchedule = prefs[KEY_WALLPAPER_SYNC_SCHEDULE] ?: d.wallpaperSyncSchedule,
+                wallpaperSyncToday = prefs[KEY_WALLPAPER_SYNC_TODAY] ?: d.wallpaperSyncToday,
                 wallpaperSyncCampus = prefs[KEY_WALLPAPER_SYNC_CAMPUS] ?: d.wallpaperSyncCampus,
                 wallpaperSyncSettings = prefs[KEY_WALLPAPER_SYNC_SETTINGS] ?: d.wallpaperSyncSettings,
                 developerModeEnabled = prefs[KEY_DEVELOPER_MODE_ENABLED] ?: d.developerModeEnabled,

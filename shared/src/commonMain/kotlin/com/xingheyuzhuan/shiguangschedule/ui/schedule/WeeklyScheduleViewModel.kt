@@ -188,7 +188,11 @@ class WeeklyScheduleViewModel(
                 val currentWeekCourses = cache[configPkg.mondayDate.toString()] ?: emptyList()
                 fixInvalidCourseColors(currentWeekCourses.flatMap { it.courses }, configPkg.style)
 
-                val wallpaperPath = appSettingsRepository.getActiveWallpaperPath(isDark)
+                val wallpaperPath = if (configPkg.settings.wallpaperSyncSchedule) {
+                    appSettingsRepository.getActiveWallpaperPath(isDark)
+                } else {
+                    null
+                }
                 val wallpaperVisuals = WallpaperVisualConfig(
                     wallpaperPath = wallpaperPath,
                     blurDp = configPkg.settings.wallpaperBlurDp,
@@ -234,12 +238,12 @@ class WeeklyScheduleViewModel(
     }
 
     private fun fixInvalidCourseColors(courses: List<CourseWithWeeks>, style: ScheduleGridStyle) {
+        val validRange = style.courseColorMaps.indices
+        val invalid = courses.filter { it.course.colorInt !in validRange }
+        if (invalid.isEmpty()) return
         viewModelScope.launch {
-            val validRange = style.courseColorMaps.indices
-            courses.forEach { cw ->
-                if (cw.course.colorInt !in validRange) {
-                    courseTableRepository.updateCourseColor(cw.course.id, style.generateRandomColorIndex())
-                }
+            invalid.forEach { cw ->
+                courseTableRepository.updateCourseColor(cw.course.id, style.generateRandomColorIndex())
             }
         }
     }

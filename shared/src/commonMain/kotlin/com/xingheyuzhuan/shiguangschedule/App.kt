@@ -14,11 +14,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
@@ -117,18 +121,36 @@ fun AppNavigation(
         startDestination
     )
 
-    val currentDestination = backStack.lastOrNull() as? Destination ?: startDestination
+    // 4 个主 Tab 独立保活：首次访问后驻留组合树与 ViewModel，切换今日/周课表/校园/我的零重建零卡顿
+    var activeMainTab by remember { mutableStateOf(startDestination) }
+    val visitedMainTabs = remember { mutableStateListOf(startDestination) }
+
+    val isAtMainRoot = backStack.size == 1 && (backStack.firstOrNull() as? Destination)?.isMainScreen == true
+    val currentDestination = if (isAtMainRoot) {
+        activeMainTab
+    } else {
+        backStack.lastOrNull() as? Destination ?: activeMainTab
+    }
 
     var navHideFraction by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(activeMainTab, isAtMainRoot) {
+        if (!isAtMainRoot || activeMainTab != Destination.CourseSchedule) {
+            navHideFraction = 0f
+        }
+    }
 
     val pendingFile by ExternalFileManager.pendingFile.collectAsState()
 
     val onNavigate: (Destination) -> Unit = remember(backStack) {
         { dest ->
             if (dest.isMainScreen) {
-                if (backStack.lastOrNull() != dest) {
-                    backStack.clear()
-                    backStack.add(dest)
+                if (dest !in visitedMainTabs) {
+                    visitedMainTabs.add(dest)
+                }
+                activeMainTab = dest
+                while (backStack.size > 1) {
+                    backStack.removeAt(backStack.lastIndex)
                 }
             } else {
                 if (backStack.lastOrNull() != dest) {
@@ -140,7 +162,7 @@ fun AppNavigation(
 
     LaunchedEffect(pendingFile) {
         val target = pendingFile?.targetDestination
-        if (target != null && backStack.lastOrNull() != target) {
+        if (target != null && currentDestination != target) {
             onNavigate(target)
         }
     }
@@ -153,7 +175,7 @@ fun AppNavigation(
         }
     }
 
-    val animSpec = tween<IntOffset>(300)
+    val animSpec = tween<IntOffset>(280)
     val isDark = LocalIsDarkTheme.current
     val activeWallpaperRaw = if (appSettings.wallpaperFollowDarkMode) {
         if (isDark) appSettings.backgroundImagePath.dark else appSettings.backgroundImagePath.light
@@ -179,7 +201,8 @@ fun AppNavigation(
     fun isSyncedWithWallpaper(dest: Destination): Boolean {
         if (!sharedWallpaperVisuals.hasWallpaper) return false
         return when (dest) {
-            Destination.CourseSchedule, Destination.TodaySchedule -> true
+            Destination.CourseSchedule -> appSettings.wallpaperSyncSchedule
+            Destination.TodaySchedule -> appSettings.wallpaperSyncToday
             Destination.CampusDiscover -> appSettings.wallpaperSyncCampus
             Destination.Settings -> appSettings.wallpaperSyncSettings
             else -> false
@@ -214,24 +237,12 @@ fun AppNavigation(
                 onBack = onBack,
                 modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
-                    val fromMain = (initialState.key as? Destination)?.isMainScreen == true
-                    val toMain = (targetState.key as? Destination)?.isMainScreen == true
-                    if (fromMain && toMain) {
-                        fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(110))
-                    } else {
-                        slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
-                                slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
-                    }
+                    slideInHorizontally(initialOffsetX = { it }, animationSpec = animSpec) togetherWith
+                            slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeOut()
                 },
                 popTransitionSpec = {
-                    val fromMain = (initialState.key as? Destination)?.isMainScreen == true
-                    val toMain = (targetState.key as? Destination)?.isMainScreen == true
-                    if (fromMain && toMain) {
-                        fadeIn(animationSpec = tween(150)) togetherWith fadeOut(animationSpec = tween(110))
-                    } else {
-                        slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
-                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
-                    }
+                    slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
+                            slideOutHorizontally(targetOffsetX = { it }, animationSpec = animSpec)
                 },
                 predictivePopTransitionSpec = {
                     slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = animSpec) + fadeIn() togetherWith
@@ -243,7 +254,6 @@ fun AppNavigation(
                 )
             ) { key ->
                 val destination = key as Destination
-                val entryUsesWallpaper = isSyncedWithWallpaper(destination)
 
                 NavEntry(
                     key = key,
@@ -251,17 +261,32 @@ fun AppNavigation(
                         put(ShiguangNavMetadata.IsMainScreenKey, destination.isMainScreen)
                     }
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = if (entryUsesWallpaper) Color.Transparent else MaterialTheme.colorScheme.background
-                    ) {
-                        ScreenContent(
-                            targetDest = destination,
+                    if (destination.isMainScreen) {
+                        MainTabsPersistentHost(
+                            visitedTabs = visitedMainTabs,
+                            activeTab = activeMainTab,
+                            isTabWallpaperSynced = ::isSyncedWithWallpaper,
                             onNavigate = onNavigate,
                             onBack = onBack,
-                            onNavHideFractionChanged = { navHideFraction = it },
-                            hasSharedWallpaper = entryUsesWallpaper
+                            onCourseScheduleNavHideChanged = { frac ->
+                                if (activeMainTab == Destination.CourseSchedule) {
+                                    navHideFraction = frac
+                                }
+                            }
                         )
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            ScreenContent(
+                                targetDest = destination,
+                                onNavigate = onNavigate,
+                                onBack = onBack,
+                                onNavHideFractionChanged = { navHideFraction = it },
+                                hasSharedWallpaper = false
+                            )
+                        }
                     }
                 }
             }
@@ -272,6 +297,50 @@ fun AppNavigation(
             currentDestination = currentDestination,
             onNavigate = onNavigate
         )
+    }
+}
+
+/**
+ * 零开销主 Tab 保活容器：
+ * 已访问的 4 个主 Tab 常驻组合树并保留各自 ViewModel/滚动位置，
+ * 非激活 Tab 跳过测量、布局与绘制（零 GPU 过绘、零触摸穿透），切换今日↔课表毫秒级瞬切。
+ */
+@Composable
+private fun MainTabsPersistentHost(
+    visitedTabs: List<Destination>,
+    activeTab: Destination,
+    isTabWallpaperSynced: (Destination) -> Boolean,
+    onNavigate: (Destination) -> Unit,
+    onBack: () -> Unit,
+    onCourseScheduleNavHideChanged: (Float) -> Unit
+) {
+    val activeIdx = visitedTabs.indexOf(activeTab).coerceAtLeast(0)
+    Layout(
+        modifier = Modifier.fillMaxSize(),
+        content = {
+            visitedTabs.forEach { tab ->
+                key(tab) {
+                    val tabUsesWallpaper = isTabWallpaperSynced(tab)
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = if (tabUsesWallpaper) Color.Transparent else MaterialTheme.colorScheme.background
+                    ) {
+                        ScreenContent(
+                            targetDest = tab,
+                            onNavigate = onNavigate,
+                            onBack = onBack,
+                            onNavHideFractionChanged = onCourseScheduleNavHideChanged,
+                            hasSharedWallpaper = tabUsesWallpaper
+                        )
+                    }
+                }
+            }
+        }
+    ) { measurables, constraints ->
+        val activePlaceable = measurables.getOrNull(activeIdx)?.measure(constraints)
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            activePlaceable?.placeRelative(0, 0)
+        }
     }
 }
 

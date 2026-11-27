@@ -252,14 +252,7 @@ fun WeeklyScheduleScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .then(
-                                    if (hasWallpaper) {
-                                        Modifier.background(Color.Black.copy(alpha = 0.18f))
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
                                     if (!uiState.isSemesterSet || uiState.semesterStartDate == null) {
                                         onNavigate(Destination.Settings)
@@ -267,11 +260,11 @@ fun WeeklyScheduleScreen(
                                         showWeekSelector = true
                                     }
                                 }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
                             Text(
                                 text = displayTitle,
-                                fontSize = 21.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = titleTextColor,
                                 style = TextStyle(shadow = headerShadow)
@@ -286,56 +279,26 @@ fun WeeklyScheduleScreen(
                         }
                     },
                     actions = {
-                        val iconBtnBg = if (hasWallpaper) Color.Black.copy(alpha = 0.22f) else Color.Transparent
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(end = 6.dp)
-                        ) {
-                            Surface(
-                                onClick = { onNavigate(Destination.AddEditCourse()) },
-                                shape = CircleShape,
-                                color = iconBtnBg,
-                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = vectorResource(Res.drawable.add_24px),
-                                        contentDescription = "添加课程",
-                                        tint = customTextColor,
-                                        modifier = Modifier.size(21.dp)
-                                    )
-                                }
-                            }
-                            Surface(
-                                onClick = { onNavigate(Destination.ThemeSettings) },
-                                shape = CircleShape,
-                                color = iconBtnBg,
-                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = vectorResource(Res.drawable.contrast_24px),
-                                        contentDescription = "主题与深色模式",
-                                        tint = customTextColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            Surface(
-                                onClick = { showTableSwitcher = true },
-                                shape = CircleShape,
-                                color = iconBtnBg,
-                                modifier = Modifier.padding(horizontal = 3.dp).size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = vectorResource(Res.drawable.swap_horiz_24px),
-                                        contentDescription = stringResource(Res.string.action_select_table),
-                                        tint = customTextColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
+                        IconButton(onClick = { onNavigate(Destination.AddEditCourse()) }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.add_24px),
+                                contentDescription = "添加课程",
+                                tint = customTextColor
+                            )
+                        }
+                        IconButton(onClick = { onNavigate(Destination.ThemeSettings) }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.contrast_24px),
+                                contentDescription = "主题与深色模式",
+                                tint = customTextColor
+                            )
+                        }
+                        IconButton(onClick = { showTableSwitcher = true }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.swap_horiz_24px),
+                                contentDescription = stringResource(Res.string.action_select_table),
+                                tint = customTextColor
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -362,7 +325,7 @@ fun WeeklyScheduleScreen(
                         end = scaffoldInnerPadding.calculateEndPadding(LayoutDirection.Ltr)
                     )
                     .fillMaxSize(),
-                beyondViewportPageCount = 1,
+                beyondViewportPageCount = 0,
                 userScrollEnabled = !isGridHolding
             ) { pageIndex ->
 
@@ -401,7 +364,17 @@ fun WeeklyScheduleScreen(
                     null
                 }
 
-                val gridViewState = remember(pageDateStrings, pageYearString, uiState, pageCourses, pageTodayIndex, weekStr) {
+                val gridViewState = remember(
+                    pageDateStrings,
+                    pageYearString,
+                    uiState.timeSlots,
+                    pageCourses,
+                    uiState.showWeekends,
+                    pageTodayIndex,
+                    uiState.firstDayOfWeek,
+                    uiState.currentSectionIndex,
+                    weekStr
+                ) {
                     ScheduleGridViewState(
                         dates = pageDateStrings,
                         currentYear = pageYearString,

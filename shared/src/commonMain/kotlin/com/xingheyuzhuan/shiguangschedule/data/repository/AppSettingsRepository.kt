@@ -182,6 +182,8 @@ class AppSettingsRepository(
         dimAlpha: Float? = null,
         glassEnabled: Boolean? = null,
         cardFrost: Float? = null,
+        syncSchedule: Boolean? = null,
+        syncToday: Boolean? = null,
         syncCampus: Boolean? = null,
         syncSettings: Boolean? = null
     ) {
@@ -191,6 +193,8 @@ class AppSettingsRepository(
             dimAlpha?.let { prefs[AppSettingsModel.KEY_WALLPAPER_DIM_ALPHA] = it.coerceIn(0f, 0.55f) }
             glassEnabled?.let { prefs[AppSettingsModel.KEY_WALLPAPER_GLASS_ENABLED] = it }
             cardFrost?.let { prefs[AppSettingsModel.KEY_WALLPAPER_CARD_FROST] = it.coerceIn(0f, 0.85f) }
+            syncSchedule?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SCHEDULE] = it }
+            syncToday?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_TODAY] = it }
             syncCampus?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_CAMPUS] = it }
             syncSettings?.let { prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SETTINGS] = it }
         }
@@ -225,6 +229,8 @@ class AppSettingsRepository(
             prefs[AppSettingsModel.KEY_RECENT_WALLPAPERS_JSON] = Json.encodeToString(
                 newSettings.recentWallpapers.filter { it.isNotBlank() }.distinct().take(3)
             )
+            prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SCHEDULE] = newSettings.wallpaperSyncSchedule
+            prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_TODAY] = newSettings.wallpaperSyncToday
             prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_CAMPUS] = newSettings.wallpaperSyncCampus
             prefs[AppSettingsModel.KEY_WALLPAPER_SYNC_SETTINGS] = newSettings.wallpaperSyncSettings
             prefs[AppSettingsModel.KEY_DEVELOPER_MODE_ENABLED] = newSettings.developerModeEnabled

@@ -56,7 +56,11 @@ class TodayScheduleViewModel(
         appSettingsRepository.getAppSettings(),
         _isDarkTheme
     ) { settings, isDark ->
-        val path = appSettingsRepository.getActiveWallpaperPath(isDark)
+        val path = if (settings.wallpaperSyncToday) {
+            appSettingsRepository.getActiveWallpaperPath(isDark)
+        } else {
+            null
+        }
         WallpaperVisualConfig(
             wallpaperPath = path,
             blurDp = settings.wallpaperBlurDp,

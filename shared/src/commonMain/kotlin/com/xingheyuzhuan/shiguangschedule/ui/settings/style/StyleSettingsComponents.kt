@@ -34,6 +34,7 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -209,6 +210,8 @@ fun SettingsListContent(
             onCardFrostChange = viewModel::updateWallpaperCardFrost,
             onDimChange = viewModel::updateWallpaperDim,
             onGlassEnabledChange = viewModel::updateWallpaperGlassEnabled,
+            onSyncScheduleChange = viewModel::updateWallpaperSyncSchedule,
+            onSyncTodayChange = viewModel::updateWallpaperSyncToday,
             onSyncCampusChange = viewModel::updateWallpaperSyncCampus,
             onSyncSettingsChange = viewModel::updateWallpaperSyncSettings,
             onApplyRecent = { path -> viewModel.applyRecentWallpaper(path, isPreviewDark) }
@@ -347,6 +350,8 @@ private fun WallpaperGlassStudioSection(
     onCardFrostChange: (Float) -> Unit,
     onDimChange: (Float) -> Unit,
     onGlassEnabledChange: (Boolean) -> Unit,
+    onSyncScheduleChange: (Boolean) -> Unit,
+    onSyncTodayChange: (Boolean) -> Unit,
     onSyncCampusChange: (Boolean) -> Unit,
     onSyncSettingsChange: (Boolean) -> Unit,
     onApplyRecent: (String) -> Unit
@@ -419,50 +424,63 @@ private fun WallpaperGlassStudioSection(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "同步壁纸到「校园」页面",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "壁纸生效页面",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "自由选择哪些主页面启用自定义背景（可多选或全关）",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = appSettings.wallpaperSyncSchedule,
+                        onClick = { onSyncScheduleChange(!appSettings.wallpaperSyncSchedule) },
+                        label = { Text("周课表", maxLines = 1) },
+                        leadingIcon = if (appSettings.wallpaperSyncSchedule) {
+                            { Icon(vectorResource(Res.drawable.check_24px), contentDescription = null, modifier = Modifier.size(15.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "开启后校园主页自动沿用当前壁纸与磨砂卡片",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    FilterChip(
+                        selected = appSettings.wallpaperSyncToday,
+                        onClick = { onSyncTodayChange(!appSettings.wallpaperSyncToday) },
+                        label = { Text("今日课表", maxLines = 1) },
+                        leadingIcon = if (appSettings.wallpaperSyncToday) {
+                            { Icon(vectorResource(Res.drawable.check_24px), contentDescription = null, modifier = Modifier.size(15.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                Switch(
-                    checked = appSettings.wallpaperSyncCampus,
-                    onCheckedChange = onSyncCampusChange
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "同步壁纸到「我的 / 设置」页面",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = appSettings.wallpaperSyncCampus,
+                        onClick = { onSyncCampusChange(!appSettings.wallpaperSyncCampus) },
+                        label = { Text("校园", maxLines = 1) },
+                        leadingIcon = if (appSettings.wallpaperSyncCampus) {
+                            { Icon(vectorResource(Res.drawable.check_24px), contentDescription = null, modifier = Modifier.size(15.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "周课表与今日课表始终同步，此处控制设置页是否同步",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    FilterChip(
+                        selected = appSettings.wallpaperSyncSettings,
+                        onClick = { onSyncSettingsChange(!appSettings.wallpaperSyncSettings) },
+                        label = { Text("我的 / 设置", maxLines = 1) },
+                        leadingIcon = if (appSettings.wallpaperSyncSettings) {
+                            { Icon(vectorResource(Res.drawable.check_24px), contentDescription = null, modifier = Modifier.size(15.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                Switch(
-                    checked = appSettings.wallpaperSyncSettings,
-                    onCheckedChange = onSyncSettingsChange
-                )
             }
         }
     }

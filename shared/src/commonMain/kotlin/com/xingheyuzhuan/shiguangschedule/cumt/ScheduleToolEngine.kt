@@ -392,7 +392,7 @@ class ScheduleToolEngine(
                     put("courseCount", courseCount)
                     put("semesterStartDate", config?.semesterStartDate.orEmpty())
                     put("semesterTotalWeeks", config?.semesterTotalWeeks ?: 20)
-                    put("showWeekends", config?.showWeekends ?: false)
+                    put("showWeekends", config?.showWeekends ?: true)
                     if (currentWeek != null) put("currentWeek", currentWeek)
                     putJsonArray("timeSlots") {
                         slots.sortedBy { it.number }.forEach { slot ->

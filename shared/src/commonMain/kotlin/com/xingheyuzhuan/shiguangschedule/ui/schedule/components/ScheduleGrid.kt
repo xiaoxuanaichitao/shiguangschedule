@@ -1,9 +1,11 @@
 package com.xingheyuzhuan.shiguangschedule.ui.schedule.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
@@ -32,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.xingheyuzhuan.shiguangschedule.data.model.schedule_style.ScheduleModeProto
+import com.xingheyuzhuan.shiguangschedule.ui.theme.LocalIsDarkTheme
 import com.xingheyuzhuan.shiguangschedule.ui.theme.withDefaultFontScale
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringArrayResource
@@ -54,8 +61,17 @@ fun ScheduleGrid(
     val rawDensity = LocalDensity.current
     val gridDensity = remember(rawDensity) { rawDensity.withDefaultFontScale() }
     CompositionLocalProvider(LocalDensity provides gridDensity) {
-    Box(modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
         val density = LocalDensity.current
+        val isWideTablet = maxWidth >= 600.dp
+        val isDark = LocalIsDarkTheme.current
+        val todayColumnTint = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.08f else 0.045f)
+        val tabletSubtleGridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.28f else 0.42f)
+        val effectiveOuterPadding = if (isWideTablet) {
+            maxOf(style.courseBlockOuterPadding, 4.dp)
+        } else {
+            style.courseBlockOuterPadding
+        }
 
         LaunchedEffect(viewState.mergedCourses) {
             state.resetAllStates()
@@ -186,7 +202,36 @@ fun ScheduleGrid(
             }
         }
 
-        Column(Modifier.fillMaxSize()) {
+        val calendarContainerModifier = if (isWideTablet) {
+            Modifier
+                .fillMaxSize()
+                .padding(start = 10.dp, end = 16.dp, top = 2.dp, bottom = 12.dp)
+        } else {
+            Modifier.fillMaxSize()
+        }
+
+        Surface(
+            modifier = calendarContainerModifier,
+            shape = RoundedCornerShape(if (isWideTablet) 22.dp else 0.dp),
+            color = when {
+                !isWideTablet || style.hasWallpaper -> Color.Transparent
+                isDark -> MaterialTheme.colorScheme.surfaceContainerLow
+                else -> Color.White.copy(alpha = 0.90f)
+            },
+            border = if (isWideTablet && !style.hasWallpaper) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            } else {
+                null
+            }
+        ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(
+                    top = if (isWideTablet && !style.hasWallpaper) 6.dp else 0.dp,
+                    end = if (isWideTablet && !style.hasWallpaper) 6.dp else 0.dp
+                )
+        ) {
             DayHeader(style, displayDays, viewState.dates, viewState.currentYear, viewState.currentWeek, viewState.todayIndex, gridLineColor, pageTextColor, pageSubTextColor, strokeWidthPx)
 
             Column(
@@ -213,7 +258,7 @@ fun ScheduleGrid(
 
                             Box(
                                 modifier = Modifier
-                                    .padding(style.courseBlockOuterPadding)
+                                    .padding(effectiveOuterPadding)
                                     .zIndex(if (isExpanded) 2f else 0f)
                                     .then(
                                         if (!isExpanded) {
@@ -380,8 +425,28 @@ fun ScheduleGrid(
                         .height(totalGridHeight).weight(1f)
                         .onSizeChanged { state.gridWidthPx = it.width.toFloat() }
                         .drawBehind {
-                            if (style.hideGridLines) return@drawBehind
                             val cellWidth = size.width / displayDaysCount
+                            // 平板宽屏：绘制柔和的今日高亮列底色与极细日历网格，告别大片空白感
+                            if (isWideTablet && !style.hasWallpaper && viewState.todayIndex in 0 until displayDaysCount) {
+                                drawRect(
+                                    color = todayColumnTint,
+                                    topLeft = Offset(viewState.todayIndex * cellWidth, 0f),
+                                    size = Size(cellWidth, size.height)
+                                )
+                            }
+                            if (style.hideGridLines) {
+                                if (isWideTablet && !style.hasWallpaper) {
+                                    for (i in 1 until displayDaysCount) {
+                                        val x = i * cellWidth
+                                        drawLine(tabletSubtleGridColor.copy(alpha = 0.22f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
+                                    }
+                                    for (i in 1..maxGridSections) {
+                                        val y = i * sectionHeightPx
+                                        drawLine(tabletSubtleGridColor.copy(alpha = 0.28f), Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
+                                    }
+                                }
+                                return@drawBehind
+                            }
                             for (i in 1..displayDaysCount) {
                                 val x = i * cellWidth
                                 drawLine(gridLineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = strokeWidthPx)
@@ -469,6 +534,7 @@ fun ScheduleGrid(
             if (bottomExtraPadding > 0.dp) {
                 Spacer(modifier = Modifier.height(bottomExtraPadding))
             }
+        }
         }
         }
     }

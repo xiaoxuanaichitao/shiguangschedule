@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -163,7 +164,8 @@ fun TodayScheduleScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = innerPadding.calculateTopPadding())
+                    .padding(top = innerPadding.calculateTopPadding()),
+                contentAlignment = Alignment.TopCenter
             ) {
                 when (val state = uiState) {
                     is TodayUiState.Loading -> { /* 可放置圆圈加载 */ }
@@ -173,6 +175,7 @@ fun TodayScheduleScreen(
                             gridStyle = gridStyle,
                             wallpaperVisuals = effectiveVisuals,
                             isDark = isDark,
+                            modifier = Modifier.widthIn(max = 760.dp),
                             upcomingExamHint = upcomingExamHint,
                             onExamHintClick = { onNavigate(Destination.CumtExams) }
                         )

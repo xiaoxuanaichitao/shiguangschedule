@@ -1015,5 +1015,9 @@ class CumtUnitTests {
         assertEquals(3, candidates.size)
         assertTrue(candidates[0].second.startsWith("https://gh-proxy.com/https://github.com/"))
         assertTrue(candidates[2].second.startsWith("https://github.com/"))
+
+        // 新建课表与默认周课表状态应默认开启周六周日显示
+        assertTrue(com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfig(courseTableId = "t1").showWeekends)
+        assertTrue(com.xingheyuzhuan.shiguangschedule.ui.schedule.model.WeeklyScheduleUiState().showWeekends)
     }
 }

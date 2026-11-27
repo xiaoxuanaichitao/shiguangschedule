@@ -250,32 +250,60 @@ fun WeeklyScheduleScreen(
                 TopAppBar(
                     title = {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    if (!uiState.isSemesterSet || uiState.semesterStartDate == null) {
-                                        onNavigate(Destination.Settings)
-                                    } else {
-                                        showWeekSelector = true
-                                    }
-                                }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = displayTitle,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = titleTextColor,
-                                style = TextStyle(shadow = headerShadow)
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = vectorResource(Res.drawable.arrow_drop_down_24px),
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = customSubTextColor
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        if (!uiState.isSemesterSet || uiState.semesterStartDate == null) {
+                                            onNavigate(Destination.Settings)
+                                        } else {
+                                            showWeekSelector = true
+                                        }
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = displayTitle,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = titleTextColor,
+                                    style = TextStyle(shadow = headerShadow)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = vectorResource(Res.drawable.arrow_drop_down_24px),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(22.dp),
+                                    tint = customSubTextColor
+                                )
+                            }
+                            if (pagerState.currentPage != INFINITE_PAGER_CENTER) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(INFINITE_PAGER_CENTER)
+                                        }
+                                    },
+                                    shape = CircleShape,
+                                    color = if (hasWallpaper) {
+                                        Color.White.copy(alpha = 0.22f)
+                                    } else {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+                                    }
+                                ) {
+                                    Text(
+                                        text = "回本周",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (hasWallpaper) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
                         }
                     },
                     actions = {

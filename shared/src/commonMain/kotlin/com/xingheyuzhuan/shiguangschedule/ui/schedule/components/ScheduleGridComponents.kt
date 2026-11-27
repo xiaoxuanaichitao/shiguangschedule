@@ -182,6 +182,7 @@ fun DayHeader(
 
     BoxWithConstraints(Modifier.fillMaxWidth().height(style.dayHeaderHeight)) {
         val shouldShowDate = !style.hideDateUnderDay && maxHeight >= 42.dp
+        val isWideHeader = maxWidth >= 600.dp
 
         Row(Modifier.fillMaxSize()) {
             Box(
@@ -202,8 +203,8 @@ fun DayHeader(
                 ) {
                     Text(
                         text = monthLabel,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = if (isWideHeader) 12.sp else 11.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = subTextColor,
                         style = TextStyle(shadow = textShadow)
                     )
@@ -224,6 +225,13 @@ fun DayHeader(
                                 drawLine(lineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = strokeWidthPx)
                             }
                             drawLine(lineColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidthPx)
+                        } else if (isWideHeader && !style.hasWallpaper) {
+                            drawLine(
+                                lineColor.copy(alpha = 0.55f),
+                                Offset(0f, size.height),
+                                Offset(size.width, size.height),
+                                strokeWidthPx
+                            )
                         }
                     }
             ) {
@@ -233,7 +241,7 @@ fun DayHeader(
                     val pillBg = when {
                         !isToday -> Color.Transparent
                         style.hasWallpaper -> Color.White.copy(alpha = 0.22f)
-                        isDark -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                        isDark -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
                         else -> Color(0xFFCFF2EA)
                     }
                     val pillBorder = when {
@@ -254,50 +262,94 @@ fun DayHeader(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .padding(horizontal = 2.dp, vertical = 4.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(pillBg)
-                            .then(
-                                if (isToday) {
-                                    Modifier.border(1.dp, pillBorder, RoundedCornerShape(10.dp))
-                                } else {
-                                    Modifier
-                                }
-                            ),
+                            .padding(horizontal = if (isWideHeader) 4.dp else 2.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .padding(vertical = 1.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = displayLabel,
-                                fontSize = 13.sp,
-                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                                color = dayTextColor,
-                                maxLines = 1,
-                                style = TextStyle(
-                                    lineHeight = 16.sp,
-                                    shadow = textShadow
-                                )
-                            )
-
-                            if (shouldShowDate && dates.size > index) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = dates[index],
-                                    fontSize = 10.sp,
-                                    fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal,
-                                    color = dateTextColor,
-                                    maxLines = 1,
-                                    style = TextStyle(
-                                        lineHeight = 12.sp,
-                                        shadow = textShadow
+                        if (isWideHeader) {
+                            // 平板宽屏：居中克制胶囊，横向排布「周五 · 11/27」，避免整列拉伸变形
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(pillBg)
+                                    .then(
+                                        if (isToday) {
+                                            Modifier.border(1.dp, pillBorder, RoundedCornerShape(12.dp))
+                                        } else {
+                                            Modifier
+                                        }
                                     )
+                                    .padding(horizontal = 14.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Text(
+                                    text = displayLabel,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = dayTextColor,
+                                    maxLines = 1,
+                                    style = TextStyle(lineHeight = 16.sp, shadow = textShadow)
                                 )
+                                if (shouldShowDate && dates.size > index) {
+                                    Text(
+                                        text = dates[index],
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = dateTextColor,
+                                        maxLines = 1,
+                                        style = TextStyle(lineHeight = 14.sp, shadow = textShadow)
+                                    )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(pillBg)
+                                    .then(
+                                        if (isToday) {
+                                            Modifier.border(1.dp, pillBorder, RoundedCornerShape(10.dp))
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .padding(vertical = 1.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = displayLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                                        color = dayTextColor,
+                                        maxLines = 1,
+                                        style = TextStyle(
+                                            lineHeight = 16.sp,
+                                            shadow = textShadow
+                                        )
+                                    )
+
+                                    if (shouldShowDate && dates.size > index) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = dates[index],
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isToday) FontWeight.Medium else FontWeight.Normal,
+                                            color = dateTextColor,
+                                            maxLines = 1,
+                                            style = TextStyle(
+                                                lineHeight = 12.sp,
+                                                shadow = textShadow
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,12 +25,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
@@ -155,28 +159,82 @@ fun AdaptiveNavigationScaffold(
                 Row(modifier = Modifier.fillMaxSize()) {
                     AnimatedVisibility(
                         visible = showNavigation,
-                        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(tween(300)),
-                        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(tween(300))
+                        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(tween(260)),
+                        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(tween(260))
                     ) {
-                        NavigationRail(
-                            containerColor = if (isTransparent) Color.Transparent else NavigationRailDefaults.ContainerColor,
-                            modifier = Modifier.fillMaxHeight()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                                .padding(start = 12.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            navItems.forEach { item ->
-                                key(item.destination) {
-                                    val isSelected = currentDestination::class == item.destination::class
-                                    NavigationRailItem(
-                                        selected = isSelected,
-                                        onClick = { if (!isSelected) onTabSelected(item.destination) },
-                                        icon = {
-                                            Icon(
-                                                imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                                contentDescription = item.label,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        },
-                                        label = { Text(item.label, fontSize = 12.sp) }
+                            Surface(
+                                shape = RoundedCornerShape(26.dp),
+                                color = when {
+                                    isTransparent -> Color.Transparent
+                                    isFrostedGlass -> Color(0xFF141820).copy(alpha = 0.48f)
+                                    else -> MaterialTheme.colorScheme.surfaceContainerLow
+                                },
+                                shadowElevation = if (isTransparent || isFrostedGlass) 0.dp else 4.dp,
+                                border = when {
+                                    isTransparent -> null
+                                    isFrostedGlass -> BorderStroke(0.9.dp, Color.White.copy(alpha = 0.28f))
+                                    else -> BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)
                                     )
+                                }
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    navItems.forEach { item ->
+                                        key(item.destination) {
+                                            val isSelected = currentDestination::class == item.destination::class
+                                            val itemBg = when {
+                                                !isSelected -> Color.Transparent
+                                                isFrostedGlass -> Color.White.copy(alpha = 0.22f)
+                                                else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                                            }
+                                            val itemTint = when {
+                                                isFrostedGlass && isSelected -> Color.White
+                                                isFrostedGlass -> Color.White.copy(alpha = 0.78f)
+                                                isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            }
+                                            Column(
+                                                modifier = Modifier
+                                                    .width(60.dp)
+                                                    .clip(RoundedCornerShape(16.dp))
+                                                    .background(itemBg)
+                                                    .clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = null
+                                                    ) { if (!isSelected) onTabSelected(item.destination) }
+                                                    .padding(vertical = 9.dp, horizontal = 4.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                                    contentDescription = item.label,
+                                                    tint = itemTint,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                                Text(
+                                                    text = item.label,
+                                                    color = itemTint,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

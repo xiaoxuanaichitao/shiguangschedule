@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
@@ -351,10 +353,18 @@ fun CampusDiscoverScreen(
         }
     ) { paddingValues ->
         val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        LazyColumn(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
+            contentAlignment = Alignment.TopCenter
+        ) {
+        val toolColumns = if (maxWidth >= 680.dp) 4 else 2
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth()
+                .widthIn(max = 920.dp),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
@@ -789,15 +799,15 @@ fun CampusDiscoverScreen(
                 }
             }
 
-            // 两列卡片网格
-            val rows = tools.chunked(2)
+            // 响应式卡片网格（手机 2 列，平板 4 列）
+            val rows = tools.chunked(toolColumns)
             items(rows.size) { rowIdx ->
-                val pair = rows[rowIdx]
+                val rowItems = rows[rowIdx]
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    pair.forEach { tool ->
+                    rowItems.forEach { tool ->
                         DiscoverToolCard(
                             item = tool,
                             containerColor = cardBgColor,
@@ -805,11 +815,12 @@ fun CampusDiscoverScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    if (pair.size == 1) {
+                    repeat(toolColumns - rowItems.size) {
                         Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
+        }
         }
     }
 

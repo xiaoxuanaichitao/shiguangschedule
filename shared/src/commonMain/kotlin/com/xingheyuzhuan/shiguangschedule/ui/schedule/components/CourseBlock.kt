@@ -4,11 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -146,7 +150,7 @@ fun CourseBlock(
     val showLocation = !style.hideLocation && course.position.isNotBlank()
     val horizontalPad = (style.courseBlockInnerPadding - 1.5.dp).coerceAtLeast(2.5.dp)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .then(floatingShadowModifier)
             .fillMaxSize()
@@ -161,75 +165,176 @@ fun CourseBlock(
                 customBorderApplied = hasExplicitBorder
             )
     ) {
-        // 课程文字内容容器
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = horizontalPad, vertical = style.courseBlockInnerPadding),
-            horizontalAlignment = horizontalAlignment,
-            verticalArrangement = verticalArrangement
-        ) {
-            if (timeTextToShow != null) {
+        val isWideCell = maxWidth >= 96.dp
+        val isTallWideCell = isWideCell && maxHeight >= 90.dp
+
+        if (isWideCell) {
+            // 平板/桌面宽格专属排版：左侧精致色条 + 左对齐编辑式信息层级，避免大色块中孤零零居中
+            val wideTitleSize = (13.2f * style.fontScale).sp
+            val wideSubSize = (11.0f * style.fontScale).sp
+            val wideTimeSize = (10.2f * style.fontScale).sp
+            val wideTimeStr = timeTextToShow ?: run {
+                val startSlot = timeSlots.find { it.number == course.startSection }
+                val endSlot = timeSlots.find { it.number == course.endSection }
+                if (startSlot != null && endSlot != null) "${startSlot.startTime}-${endSlot.endTime}" else null
+            }
+            val widePos = androidx.compose.runtime.remember(course.position, style.removeLocationAt) {
+                val raw = if (style.removeLocationAt) course.position.trim().removePrefix("@").trim() else course.position.trim()
+                raw.replace(Regex("\\s+"), " · ")
+            }
+            val accentStripeColor = if (textColor == Color.White) {
+                Color.White.copy(alpha = 0.55f)
+            } else {
+                Color.Black.copy(alpha = 0.22f)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.Top
+            ) {
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = Color.Black.copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(accentStripeColor)
+                )
+                Spacer(modifier = Modifier.width(7.dp))
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
+                    Column(
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = course.name,
+                            fontSize = wideTitleSize,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.1.sp,
+                            color = textColor,
+                            maxLines = if (isTallWideCell) 2 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start,
+                            style = TextStyle(lineHeight = 1.24.em, shadow = cardTextShadow)
+                        )
+                        if (showLocation && widePos.isNotBlank()) {
+                            Text(
+                                text = widePos,
+                                fontSize = wideSubSize,
+                                fontWeight = FontWeight.Medium,
+                                color = textColor.copy(alpha = 0.90f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Start,
+                                style = TextStyle(lineHeight = 1.18.em, shadow = cardTextShadow)
+                            )
+                        }
+                    }
+
+                    if (isTallWideCell && (wideTimeStr != null || showTeacher)) {
+                        val footerMeta = buildList {
+                            if (wideTimeStr != null) add(wideTimeStr)
+                            if (showTeacher) add(course.teacher)
+                        }.joinToString(" · ")
+                        if (footerMeta.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = Color.Black.copy(alpha = 0.14f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = footerMeta,
+                                    fontSize = wideTimeSize,
+                                    fontWeight = FontWeight.Medium,
+                                    color = textColor.copy(alpha = 0.95f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // 手机紧凑格：保留既有居中/对齐与折行优化
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = horizontalPad, vertical = style.courseBlockInnerPadding),
+                horizontalAlignment = horizontalAlignment,
+                verticalArrangement = verticalArrangement
+            ) {
+                if (timeTextToShow != null) {
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = Color.Black.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = timeTextToShow,
+                            fontSize = sTime,
+                            color = textColor,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            textAlign = textAlign,
+                            style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                }
+
+                Text(
+                    text = course.name,
+                    fontSize = sTitle,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.1.sp,
+                    color = textColor,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = textAlign,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = TextStyle(lineHeight = 1.24.em, shadow = cardTextShadow)
+                )
+
+                if (showTeacher || showLocation) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                }
+
+                if (showTeacher) {
                     Text(
-                        text = timeTextToShow,
-                        fontSize = sTime,
-                        color = textColor,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
+                        text = course.teacher,
+                        fontSize = sSub,
+                        color = textColor.copy(alpha = 0.92f),
                         textAlign = textAlign,
-                        style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(lineHeight = 1.15.em, shadow = cardTextShadow)
                     )
                 }
-                Spacer(modifier = Modifier.height(3.dp))
-            }
 
-            Text(
-                text = course.name,
-                fontSize = sTitle,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.1.sp,
-                color = textColor,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = textAlign,
-                modifier = Modifier.weight(1f, fill = false),
-                style = TextStyle(lineHeight = 1.24.em, shadow = cardTextShadow)
-            )
-
-            if (showTeacher || showLocation) {
-                Spacer(modifier = Modifier.height(3.dp))
-            }
-
-            if (showTeacher) {
-                Text(
-                    text = course.teacher,
-                    fontSize = sSub,
-                    color = textColor.copy(alpha = 0.92f),
-                    textAlign = textAlign,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(lineHeight = 1.15.em, shadow = cardTextShadow)
-                )
-            }
-
-            if (showLocation) {
-                val formattedPos = androidx.compose.runtime.remember(course.position, style.removeLocationAt) {
-                    formatCourseLocationCompact(course.position, style.removeLocationAt)
+                if (showLocation) {
+                    val formattedPos = androidx.compose.runtime.remember(course.position, style.removeLocationAt) {
+                        formatCourseLocationCompact(course.position, style.removeLocationAt)
+                    }
+                    Text(
+                        text = formattedPos,
+                        fontSize = sSub,
+                        color = textColor.copy(alpha = 0.92f),
+                        textAlign = textAlign,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(lineHeight = 1.20.em, shadow = cardTextShadow)
+                    )
                 }
-                Text(
-                    text = formattedPos,
-                    fontSize = sSub,
-                    color = textColor.copy(alpha = 0.92f),
-                    textAlign = textAlign,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(lineHeight = 1.20.em, shadow = cardTextShadow)
-                )
             }
         }
 

@@ -60,7 +60,7 @@ class AppSettingsRepository(
      */
     private val COURSE_CONFIG_TEMPLATE = CourseTableConfig(
         courseTableId = "",
-        showWeekends = false,
+        showWeekends = true,
         semesterStartDate = null,
         semesterTotalWeeks = 20,
         firstDayOfWeek = DayOfWeek.MONDAY.isoDayNumber

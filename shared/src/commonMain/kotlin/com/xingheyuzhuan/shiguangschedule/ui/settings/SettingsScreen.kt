@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -167,7 +168,7 @@ fun SettingsScreen(
             val courseTableConfig = uiState.courseConfig
             val displayCurrentWeek = uiState.currentWeek
 
-            val showWeekends = courseTableConfig?.showWeekends ?: false
+            val showWeekends = courseTableConfig?.showWeekends ?: true
             val semesterStartDateString = courseTableConfig?.semesterStartDate
             val semesterTotalWeeks = courseTableConfig?.semesterTotalWeeks ?: 20
             val firstDayOfWeekInt = courseTableConfig?.firstDayOfWeek ?: DayOfWeek.MONDAY.isoDayNumber
@@ -187,10 +188,16 @@ fun SettingsScreen(
             var showDatePickerModal by remember { mutableStateOf(false) }
             var showFirstDayOfWeekDialog by remember { mutableStateOf(false) }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentAlignment = Alignment.TopCenter
+            ) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .widthIn(max = 760.dp)
                     .padding(horizontal = SETTING_PADDING),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(SECTION_SPACING),
@@ -233,6 +240,7 @@ fun SettingsScreen(
                         cardBorderColor = cardBorderColor
                     )
                 }
+            }
             }
 
             if (showDatePickerModal) {

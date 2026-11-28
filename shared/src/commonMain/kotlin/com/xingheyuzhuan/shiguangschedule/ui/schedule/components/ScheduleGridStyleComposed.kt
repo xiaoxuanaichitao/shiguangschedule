@@ -19,6 +19,9 @@ data class ScheduleGridStyleComposed(
     val timeColumnWidth: Dp,
     val dayHeaderHeight: Dp,
     val sectionHeight: Dp,
+    val hasCustomTimeColumnWidth: Boolean = false,
+    val hasCustomDayHeaderHeight: Boolean = false,
+    val hasCustomSectionHeight: Boolean = false,
 
     // CourseBlock 外观 (Dp & Float)
     val courseBlockCornerRadius: Dp,
@@ -60,6 +63,16 @@ data class ScheduleGridStyleComposed(
     val effectiveCourseAlpha: Float
         get() = if (hasWallpaper && !hasCustomAlpha) 0.76f else courseBlockAlpha
 
+    /** 平板宽屏若用户未手动改过格子尺寸，自动应用平板专属默认参数（59 / 42 / 42） */
+    fun resolvedForViewport(isWideTablet: Boolean): ScheduleGridStyleComposed {
+        if (!isWideTablet) return this
+        return copy(
+            timeColumnWidth = if (hasCustomTimeColumnWidth) timeColumnWidth else ScheduleGridStyle.TABLET_DEFAULT_TIME_COLUMN_WIDTH.dp,
+            dayHeaderHeight = if (hasCustomDayHeaderHeight) dayHeaderHeight else ScheduleGridStyle.TABLET_DEFAULT_DAY_HEADER_HEIGHT.dp,
+            sectionHeight = if (hasCustomSectionHeight) sectionHeight else ScheduleGridStyle.TABLET_DEFAULT_SECTION_HEIGHT.dp
+        )
+    }
+
     companion object {
         /**
          * 扩展函数：将数据模型 (Float/Long) 转换为 UI 强类型模型 (Dp/Color)。
@@ -73,6 +86,9 @@ data class ScheduleGridStyleComposed(
                 timeColumnWidth = this.timeColumnWidthDp.dp,
                 dayHeaderHeight = this.dayHeaderHeightDp.dp,
                 sectionHeight = this.sectionHeightDp.dp,
+                hasCustomTimeColumnWidth = this.hasCustomTimeColumnWidth,
+                hasCustomDayHeaderHeight = this.hasCustomDayHeaderHeight,
+                hasCustomSectionHeight = this.hasCustomSectionHeight,
                 courseBlockCornerRadius = this.courseBlockCornerRadiusDp.dp,
                 courseBlockOuterPadding = this.courseBlockOuterPaddingDp.dp,
                 courseBlockInnerPadding = this.courseBlockInnerPaddingDp.dp,

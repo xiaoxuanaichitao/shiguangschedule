@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtDormPowerScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtExamScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtJwxtExtractScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtLibraryScreen
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtOnboardingDialog
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtSchoolBusScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreMappingScreen
 import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtScoreScreen
@@ -111,9 +113,9 @@ fun App() {
         autoLoginCoordinator.tryAutoLoginOnStartup()
     }
 
-    // 启动静默检查更新（延迟 2.2s，不阻塞首帧渲染；若用户已忽略该版本则不再弹窗）
+    // 启动静默极速检查更新（仅延迟 300ms 避开首帧绘制，多线路并发竞速秒级弹窗）
     LaunchedEffect(Unit) {
-        delay(2200L)
+        delay(300L)
         val result = runCatching {
             updateChecker.checkUpdate(UpdatePlatform.GITHUB, appVersionName, appVersionCode)
         }.getOrNull()
@@ -278,12 +280,31 @@ fun AppNavigation(
         darkTheme = isDark
     )
 
+    val localRepo: CumtLocalRepository = koinInject()
+    val navScope = rememberCoroutineScope()
+    var showOnboarding by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val completed = runCatching { localRepo.hasCompletedOnboarding() }.getOrDefault(true)
+        if (!completed) {
+            showOnboarding = true
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // 全局常驻底层共享壁纸层：切 Tab 时绝不销毁重建，彻底消除闪屏与壁纸跟随横滑
         if (sharedWallpaperVisuals.hasWallpaper) {
             ScheduleWallpaperBackdrop(
                 visuals = sharedWallpaperVisuals,
                 showLeftAxisScrim = currentDestination == Destination.CourseSchedule || currentDestination == Destination.TodaySchedule
+            )
+        }
+        // 当当前页面关闭了壁纸同步（如校园 / 我的）时，用纯色背景覆盖整屏含平板左侧导航栏区域，防止壁纸从左侧透出
+        if (sharedWallpaperVisuals.hasWallpaper && !currentUsesSharedWallpaper) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
             )
         }
 
@@ -359,6 +380,20 @@ fun AppNavigation(
             currentDestination = currentDestination,
             onNavigate = onNavigate
         )
+
+        if (showOnboarding) {
+            CumtOnboardingDialog(
+                onDismiss = {
+                    showOnboarding = false
+                    navScope.launch { localRepo.markOnboardingCompleted() }
+                },
+                onNavigateAndClose = { dest ->
+                    showOnboarding = false
+                    navScope.launch { localRepo.markOnboardingCompleted() }
+                    onNavigate(dest)
+                }
+            )
+        }
     }
 }
 

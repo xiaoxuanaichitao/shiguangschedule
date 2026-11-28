@@ -89,6 +89,7 @@ import shiguangschedule.shared.generated.resources.add_24px
 import shiguangschedule.shared.generated.resources.arrow_drop_down_24px
 import shiguangschedule.shared.generated.resources.contrast_24px
 import shiguangschedule.shared.generated.resources.format_week_display
+import shiguangschedule.shared.generated.resources.palette_24px
 import shiguangschedule.shared.generated.resources.snackbar_add_course_within_semester
 import shiguangschedule.shared.generated.resources.swap_horiz_24px
 import shiguangschedule.shared.generated.resources.title_current_week
@@ -311,6 +312,13 @@ fun WeeklyScheduleScreen(
                             Icon(
                                 imageVector = vectorResource(Res.drawable.add_24px),
                                 contentDescription = "添加课程",
+                                tint = customTextColor
+                            )
+                        }
+                        IconButton(onClick = { onNavigate(Destination.StyleSettings) }) {
+                            Icon(
+                                imageVector = vectorResource(Res.drawable.palette_24px),
+                                contentDescription = "壁纸与课表个性化",
                                 tint = customTextColor
                             )
                         }

@@ -9,6 +9,9 @@ import io.ktor.client.request.header
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -103,9 +106,9 @@ class UpdateChecker(
         val defaultHttpClient by lazy {
             HttpClient {
                 install(HttpTimeout) {
-                    requestTimeoutMillis = 12_000L
-                    connectTimeoutMillis = 8_000L
-                    socketTimeoutMillis = 12_000L
+                    requestTimeoutMillis = 6_500L
+                    connectTimeoutMillis = 4_500L
+                    socketTimeoutMillis = 6_500L
                 }
                 install(ContentNegotiation) {
                     json(Json {
@@ -189,90 +192,113 @@ class UpdateChecker(
             return@withContext UpdateStatus.NotSupported
         }
 
-        // 1. 优先尝试从国内加速镜像拉取轻量 update-manifest.json（国内校园网直连最快）
-        val manifestResult = fetchManifestFromMirrors()
-        if (manifestResult != null && (manifestResult.tagName.isNotBlank() || manifestResult.versionName.isNotBlank())) {
-            val displayTag = manifestResult.tagName.ifBlank { "v${manifestResult.versionName}" }
-            val isNewer = isNewerRelease(
-                latestTag = displayTag,
-                latestVersionCode = manifestResult.versionCode,
-                currentVersionName = currentVersionName,
-                currentVersionCode = currentVersionCode
-            )
-            if (!isNewer) {
-                return@withContext UpdateStatus.Latest(formatCurrentVersion(currentVersionName, currentVersionCode))
-            }
-            val pageUrl = manifestResult.fallbackPageUrl.ifBlank {
-                "https://github.com/$GITHUB_REPO/releases/tag/$displayTag"
-            }
-            val directApkUrl = manifestResult.apkUrl.trim()
-            return@withContext UpdateStatus.Found(
-                versionName = displayTag,
-                versionCode = manifestResult.versionCode.takeIf { it > 0 } ?: parseBuildCodeFromTag(displayTag),
-                changelog = manifestResult.changelog.ifBlank { "包含最新功能优化与问题修复。" },
-                targetUrl = directApkUrl.ifBlank { pageUrl },
-                isDirectDownload = directApkUrl.endsWith(".apk", ignoreCase = true),
-                releasePageUrl = pageUrl
-            )
-        }
+        // 多线路并发竞速（国内镜像清单 + 直连清单 + GitHub API），谁最快返回有效结果就立刻弹窗并取消其余慢线路
+        val manifestUrls = MIRROR_PREFIXES.map { (_, prefix) -> "$prefix$MANIFEST_DIRECT_URL" } + MANIFEST_DIRECT_URL
+        val totalProbes = manifestUrls.size + 1
 
-        // 2. 回退到 GitHub 官方 Releases API
-        try {
-            val apiUrl = when (platform) {
-                UpdatePlatform.GITHUB -> "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
-            }
-
-            val response = httpClient.get(apiUrl) {
-                header("Accept", "application/vnd.github+json")
-                header("User-Agent", "ShiguangSchedule-CUMT")
-            }.body<ApiReleaseResponse>()
-
-            if (response.tagName.isBlank()) {
-                return@withContext UpdateStatus.Error("暂无可检测的线上发布版本，请稍后再试")
+        coroutineScope {
+            val resultChannel = Channel<UpdateStatus?>(capacity = totalProbes)
+            val jobs = buildList {
+                manifestUrls.forEach { url ->
+                    add(launch {
+                        val status = runCatching {
+                            val manifest = httpClient.get(url) {
+                                header("User-Agent", "ShiguangSchedule-CUMT")
+                            }.body<UpdateManifest>()
+                            manifestToUpdateStatus(manifest, currentVersionName, currentVersionCode)
+                        }.getOrNull()
+                        resultChannel.send(status)
+                    })
+                }
+                add(launch {
+                    val status = runCatching {
+                        val apiUrl = when (platform) {
+                            UpdatePlatform.GITHUB -> "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+                        }
+                        val response = httpClient.get(apiUrl) {
+                            header("Accept", "application/vnd.github+json")
+                            header("User-Agent", "ShiguangSchedule-CUMT")
+                        }.body<ApiReleaseResponse>()
+                        releaseApiToUpdateStatus(response, currentVersionName, currentVersionCode)
+                    }.getOrNull()
+                    resultChannel.send(status)
+                })
             }
 
-            val remoteBuildCode = parseBuildCodeFromTag(response.tagName)
-            if (!isNewerRelease(response.tagName, remoteBuildCode, currentVersionName, currentVersionCode)) {
-                return@withContext UpdateStatus.Latest(formatCurrentVersion(currentVersionName, currentVersionCode))
+            var winner: UpdateStatus? = null
+            repeat(totalProbes) {
+                val res = resultChannel.receive()
+                if (res != null && winner == null) {
+                    winner = res
+                    jobs.forEach { it.cancel() }
+                    return@repeat
+                }
             }
-
-            val downloadUrl = PlatformUpdateStrategy.parseTargetUrl(response)
-            val pageUrl = response.htmlUrl.ifBlank {
-                "https://github.com/$GITHUB_REPO/releases/tag/${response.tagName}"
-            }
-
-            val (targetUrl, isDirectDownload) = if (!downloadUrl.isNullOrEmpty()) {
-                Pair(downloadUrl, true)
-            } else {
-                Pair(pageUrl, false)
-            }
-
-            UpdateStatus.Found(
-                versionName = response.tagName,
-                versionCode = remoteBuildCode,
-                changelog = response.body.ifBlank { "包含最新功能优化与问题修复。" },
-                targetUrl = targetUrl,
-                isDirectDownload = isDirectDownload,
-                releasePageUrl = pageUrl
-            )
-        } catch (_: Exception) {
-            UpdateStatus.Error("网络请求失败，请检查网络连接后重试")
+            jobs.forEach { it.cancel() }
+            resultChannel.close()
+            winner ?: UpdateStatus.Error("网络请求失败，请检查网络连接后重试")
         }
     }
 
-    private suspend fun fetchManifestFromMirrors(): UpdateManifest? {
-        val urls = MIRROR_PREFIXES.map { (_, prefix) -> "$prefix$MANIFEST_DIRECT_URL" } + MANIFEST_DIRECT_URL
-        for (url in urls) {
-            val parsed = runCatching {
-                httpClient.get(url) {
-                    header("User-Agent", "ShiguangSchedule-CUMT")
-                }.body<UpdateManifest>()
-            }.getOrNull()
-            if (parsed != null && (parsed.versionCode > 0 || parsed.tagName.isNotBlank())) {
-                return parsed
-            }
+    private fun manifestToUpdateStatus(
+        manifest: UpdateManifest,
+        currentVersionName: String,
+        currentVersionCode: Int
+    ): UpdateStatus? {
+        if (manifest.versionCode <= 0 && manifest.tagName.isBlank() && manifest.versionName.isBlank()) {
+            return null
         }
-        return null
+        val displayTag = manifest.tagName.ifBlank { "v${manifest.versionName}" }
+        val isNewer = isNewerRelease(
+            latestTag = displayTag,
+            latestVersionCode = manifest.versionCode,
+            currentVersionName = currentVersionName,
+            currentVersionCode = currentVersionCode
+        )
+        if (!isNewer) {
+            return UpdateStatus.Latest(formatCurrentVersion(currentVersionName, currentVersionCode))
+        }
+        val pageUrl = manifest.fallbackPageUrl.ifBlank {
+            "https://github.com/$GITHUB_REPO/releases/tag/$displayTag"
+        }
+        val directApkUrl = manifest.apkUrl.trim()
+        return UpdateStatus.Found(
+            versionName = displayTag,
+            versionCode = manifest.versionCode.takeIf { it > 0 } ?: parseBuildCodeFromTag(displayTag),
+            changelog = manifest.changelog.ifBlank { "包含最新功能优化与问题修复。" },
+            targetUrl = directApkUrl.ifBlank { pageUrl },
+            isDirectDownload = directApkUrl.endsWith(".apk", ignoreCase = true),
+            releasePageUrl = pageUrl
+        )
+    }
+
+    private fun releaseApiToUpdateStatus(
+        response: ApiReleaseResponse,
+        currentVersionName: String,
+        currentVersionCode: Int
+    ): UpdateStatus? {
+        if (response.tagName.isBlank()) return null
+        val remoteBuildCode = parseBuildCodeFromTag(response.tagName)
+        if (!isNewerRelease(response.tagName, remoteBuildCode, currentVersionName, currentVersionCode)) {
+            return UpdateStatus.Latest(formatCurrentVersion(currentVersionName, currentVersionCode))
+        }
+        val downloadUrl = PlatformUpdateStrategy.parseTargetUrl(response)
+        val pageUrl = response.htmlUrl.ifBlank {
+            "https://github.com/$GITHUB_REPO/releases/tag/${response.tagName}"
+        }
+        val (targetUrl, isDirectDownload) = if (!downloadUrl.isNullOrEmpty()) {
+            Pair(downloadUrl, true)
+        } else {
+            Pair(pageUrl, false)
+        }
+        return UpdateStatus.Found(
+            versionName = response.tagName,
+            versionCode = remoteBuildCode,
+            changelog = response.body.ifBlank { "包含最新功能优化与问题修复。" },
+            targetUrl = targetUrl,
+            isDirectDownload = isDirectDownload,
+            releasePageUrl = pageUrl
+        )
     }
 
     private fun formatCurrentVersion(versionName: String, versionCode: Int): String =

@@ -1019,5 +1019,22 @@ class CumtUnitTests {
         // 新建课表与默认周课表状态应默认开启周六周日显示
         assertTrue(com.xingheyuzhuan.shiguangschedule.data.db.main.CourseTableConfig(courseTableId = "t1").showWeekends)
         assertTrue(com.xingheyuzhuan.shiguangschedule.ui.schedule.model.WeeklyScheduleUiState().showWeekends)
+
+        // 平板宽屏默认参数应自动应用 59 / 42 / 42，且用户手动自定义后应保留自定义值
+        val defaultComposed = with(com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridStyleComposed) {
+            ScheduleGridStyle.DEFAULT.toComposedStyle()
+        }
+        val tabletResolved = defaultComposed.resolvedForViewport(isWideTablet = true)
+        assertEquals(59f, tabletResolved.sectionHeight.value)
+        assertEquals(42f, tabletResolved.timeColumnWidth.value)
+        assertEquals(42f, tabletResolved.dayHeaderHeight.value)
+        assertTrue(tabletResolved.hideGridLines)
+        assertTrue(!tabletResolved.showStartTime)
+
+        val customStyle = ScheduleGridStyle.DEFAULT.copy(sectionHeightDp = 72f, hasCustomSectionHeight = true)
+        val customTablet = with(com.xingheyuzhuan.shiguangschedule.ui.schedule.components.ScheduleGridStyleComposed) {
+            customStyle.toComposedStyle().resolvedForViewport(isWideTablet = true)
+        }
+        assertEquals(72f, customTablet.sectionHeight.value)
     }
 }

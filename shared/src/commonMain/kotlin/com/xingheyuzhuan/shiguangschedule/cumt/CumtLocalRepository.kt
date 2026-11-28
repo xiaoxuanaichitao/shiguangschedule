@@ -76,6 +76,7 @@ class CumtLocalRepository(
         val KEY_MCP_ALLOW_WRITE = booleanPreferencesKey("cumt_mcp_allow_write")
         val KEY_MCP_BIND_ALL = booleanPreferencesKey("cumt_mcp_bind_all")
         val KEY_IGNORED_UPDATE_VERSION = stringPreferencesKey("cumt_ignored_update_version")
+        val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("cumt_onboarding_completed")
     }
 
     // ==================== 统一身份认证凭据 ====================
@@ -650,6 +651,18 @@ class CumtLocalRepository(
     suspend fun setIgnoredUpdateVersion(versionTag: String) {
         dataStore.edit { prefs ->
             prefs[KEY_IGNORED_UPDATE_VERSION] = versionTag.trim()
+        }
+    }
+
+    // ==================== 新手使用引导状态 ====================
+
+    suspend fun hasCompletedOnboarding(): Boolean {
+        return dataStore.data.first()[KEY_ONBOARDING_COMPLETED] ?: false
+    }
+
+    suspend fun markOnboardingCompleted() {
+        dataStore.edit { prefs ->
+            prefs[KEY_ONBOARDING_COMPLETED] = true
         }
     }
 }

@@ -35,6 +35,7 @@ import com.xingheyuzhuan.shiguangschedule.tool.UpdateChecker
 import com.xingheyuzhuan.shiguangschedule.tool.UpdateDownloadState
 import com.xingheyuzhuan.shiguangschedule.tool.UpdatePlatform
 import com.xingheyuzhuan.shiguangschedule.tool.UpdateStatus
+import com.xingheyuzhuan.shiguangschedule.ui.cumt.CumtOnboardingDialog
 import com.xingheyuzhuan.shiguangschedule.ui.settings.SettingsViewModel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -93,6 +94,7 @@ fun MoreOptionsScreen(
     // 弹窗可见性控制
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showStartScreenDialog by remember { mutableStateOf(false) }
+    var showOnboardingReplay by remember { mutableStateOf(false) }
 
     // 逻辑：执行更新检查
     val startUpdateCheck: (UpdatePlatform) -> Unit = { platform ->
@@ -230,6 +232,13 @@ fun MoreOptionsScreen(
                         onClick = { onNavigate(Destination.CumtAuth) }
                     )
 
+                    // 新手使用引导（随时重看）
+                    SettingListItem(
+                        icon = vectorResource(Res.drawable.home_24px),
+                        title = "新手使用引导",
+                        onClick = { showOnboardingReplay = true }
+                    )
+
                     // 贡献者
                     SettingListItem(
                         icon = vectorResource(Res.drawable.people_alt_24px),
@@ -280,4 +289,14 @@ fun MoreOptionsScreen(
             updateChecker.launchUpdate(pageUrl)
         }
     )
+
+    if (showOnboardingReplay) {
+        CumtOnboardingDialog(
+            onDismiss = { showOnboardingReplay = false },
+            onNavigateAndClose = { dest ->
+                showOnboardingReplay = false
+                onNavigate(dest)
+            }
+        )
+    }
 }

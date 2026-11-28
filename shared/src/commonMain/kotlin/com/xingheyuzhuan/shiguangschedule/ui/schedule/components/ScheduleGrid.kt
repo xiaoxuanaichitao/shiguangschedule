@@ -65,12 +65,12 @@ fun ScheduleGrid(
         val density = LocalDensity.current
         val isWideTablet = maxWidth >= 600.dp
         val isDark = LocalIsDarkTheme.current
+        val effectiveStyle = remember(style, isWideTablet) { style.resolvedForViewport(isWideTablet) }
         val todayColumnTint = MaterialTheme.colorScheme.primary.copy(alpha = if (isDark) 0.08f else 0.045f)
-        val tabletSubtleGridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.28f else 0.42f)
         val effectiveOuterPadding = if (isWideTablet) {
-            maxOf(style.courseBlockOuterPadding, 4.dp)
+            maxOf(effectiveStyle.courseBlockOuterPadding, 3.5.dp)
         } else {
-            style.courseBlockOuterPadding
+            effectiveStyle.courseBlockOuterPadding
         }
 
         LaunchedEffect(viewState.mergedCourses) {
@@ -78,22 +78,22 @@ fun ScheduleGrid(
             actions.onHoldStateChanged(false)
         }
 
-        val pageTextColor = style.pageTextColor ?: if (style.hasWallpaper) {
+        val pageTextColor = effectiveStyle.pageTextColor ?: if (effectiveStyle.hasWallpaper) {
             androidx.compose.ui.graphics.Color.White
         } else {
             MaterialTheme.colorScheme.onSurface
         }
-        val pageSubTextColor = pageTextColor.copy(alpha = if (style.hasWallpaper) 0.84f else 0.7f)
+        val pageSubTextColor = pageTextColor.copy(alpha = if (effectiveStyle.hasWallpaper) 0.84f else 0.7f)
         val weekDays = stringArrayResource(Res.array.week_days_short_names).toList()
         val reorderedWeekDays = rearrangeDays(weekDays, viewState.firstDayOfWeek)
         val displayDays = if (viewState.showWeekends) reorderedWeekDays else reorderedWeekDays.take(5)
 
         val displayDaysCount = displayDays.size
-        val is24HourMode = style.scheduleMode == ScheduleModeProto.TIME_24H_MODE
+        val is24HourMode = effectiveStyle.scheduleMode == ScheduleModeProto.TIME_24H_MODE
         val maxGridSections = if (is24HourMode) 24 else viewState.timeSlots.size
 
-        val totalGridHeight = style.sectionHeight * maxGridSections
-        val gridLineColor = if (style.hasWallpaper) {
+        val totalGridHeight = effectiveStyle.sectionHeight * maxGridSections
+        val gridLineColor = if (effectiveStyle.hasWallpaper) {
             androidx.compose.ui.graphics.Color.White.copy(alpha = 0.16f)
         } else {
             MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
@@ -103,7 +103,7 @@ fun ScheduleGrid(
         val singleSchedulables = remember(viewState.mergedCourses, viewState.firstDayOfWeek, viewState.showWeekends) {
             calculateSingleSchedulables(viewState.mergedCourses, viewState.firstDayOfWeek, viewState.showWeekends)
         }
-        val sectionHeightPx = with(density) { style.sectionHeight.toPx() }
+        val sectionHeightPx = with(density) { effectiveStyle.sectionHeight.toPx() }
 
         var activeDragHour by remember { mutableStateOf<Int?>(null) }
         var activeDragMinuteStr by remember { mutableStateOf<String?>(null) }
@@ -214,11 +214,11 @@ fun ScheduleGrid(
             modifier = calendarContainerModifier,
             shape = RoundedCornerShape(if (isWideTablet) 22.dp else 0.dp),
             color = when {
-                !isWideTablet || style.hasWallpaper -> Color.Transparent
+                !isWideTablet || effectiveStyle.hasWallpaper -> Color.Transparent
                 isDark -> MaterialTheme.colorScheme.surfaceContainerLow
                 else -> Color.White.copy(alpha = 0.90f)
             },
-            border = if (isWideTablet && !style.hasWallpaper) {
+            border = if (isWideTablet && !effectiveStyle.hasWallpaper) {
                 BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
             } else {
                 null
@@ -228,11 +228,11 @@ fun ScheduleGrid(
             Modifier
                 .fillMaxSize()
                 .padding(
-                    top = if (isWideTablet && !style.hasWallpaper) 6.dp else 0.dp,
-                    end = if (isWideTablet && !style.hasWallpaper) 6.dp else 0.dp
+                    top = if (isWideTablet && !effectiveStyle.hasWallpaper) 6.dp else 0.dp,
+                    end = if (isWideTablet && !effectiveStyle.hasWallpaper) 6.dp else 0.dp
                 )
         ) {
-            DayHeader(style, displayDays, viewState.dates, viewState.currentYear, viewState.currentWeek, viewState.todayIndex, gridLineColor, pageTextColor, pageSubTextColor, strokeWidthPx)
+            DayHeader(effectiveStyle, displayDays, viewState.dates, viewState.currentYear, viewState.currentWeek, viewState.todayIndex, gridLineColor, pageTextColor, pageSubTextColor, strokeWidthPx)
 
             Column(
                 modifier = Modifier
@@ -242,7 +242,7 @@ fun ScheduleGrid(
             ) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                 TimeColumn(
-                    style = style, timeSlots = viewState.timeSlots, maxGridSections = maxGridSections,
+                    style = effectiveStyle, timeSlots = viewState.timeSlots, maxGridSections = maxGridSections,
                     is24HourMode = is24HourMode, onTimeSlotClicked = { actions.onTimeSlotClicked() },
                     modifier = Modifier.height(totalGridHeight), lineColor = gridLineColor,
                     currentSectionIndex = viewState.currentSectionIndex, textColor = pageTextColor,
@@ -281,7 +281,7 @@ fun ScheduleGrid(
                                 CourseBlock(
                                     courseWrapper = item.courseWrapper,
                                     isVisualDemoted = item.parentBlock.isVisualDemoted,
-                                    style = style,
+                                    style = effectiveStyle,
                                     timeSlots = viewState.timeSlots,
                                     isFloating = isExpanded,
                                     modifier = if (isExpanded) {
@@ -426,27 +426,15 @@ fun ScheduleGrid(
                         .onSizeChanged { state.gridWidthPx = it.width.toFloat() }
                         .drawBehind {
                             val cellWidth = size.width / displayDaysCount
-                            // 平板宽屏：绘制柔和的今日高亮列底色与极细日历网格，告别大片空白感
-                            if (isWideTablet && !style.hasWallpaper && viewState.todayIndex in 0 until displayDaysCount) {
+                            // 平板宽屏无壁纸时绘制柔和的今日高亮列底色；严格遵守用户「隐藏网格线」设置
+                            if (isWideTablet && !effectiveStyle.hasWallpaper && viewState.todayIndex in 0 until displayDaysCount) {
                                 drawRect(
                                     color = todayColumnTint,
                                     topLeft = Offset(viewState.todayIndex * cellWidth, 0f),
                                     size = Size(cellWidth, size.height)
                                 )
                             }
-                            if (style.hideGridLines) {
-                                if (isWideTablet && !style.hasWallpaper) {
-                                    for (i in 1 until displayDaysCount) {
-                                        val x = i * cellWidth
-                                        drawLine(tabletSubtleGridColor.copy(alpha = 0.22f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1f)
-                                    }
-                                    for (i in 1..maxGridSections) {
-                                        val y = i * sectionHeightPx
-                                        drawLine(tabletSubtleGridColor.copy(alpha = 0.28f), Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
-                                    }
-                                }
-                                return@drawBehind
-                            }
+                            if (effectiveStyle.hideGridLines) return@drawBehind
                             for (i in 1..displayDaysCount) {
                                 val x = i * cellWidth
                                 drawLine(gridLineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = strokeWidthPx)

@@ -167,20 +167,20 @@ fun CourseBlock(
     ) {
         val isWideCell = maxWidth >= 96.dp
         val isTallWideCell = isWideCell && maxHeight >= 90.dp
+        val isExtraTallWideCell = isWideCell && maxHeight >= 112.dp
 
         if (isWideCell) {
-            // 平板/桌面宽格专属排版：左侧精致色条 + 左对齐编辑式信息层级，避免大色块中孤零零居中
-            val wideTitleSize = (13.2f * style.fontScale).sp
-            val wideSubSize = (11.0f * style.fontScale).sp
-            val wideTimeSize = (10.2f * style.fontScale).sp
+            // 平板/桌面宽格专属排版：左侧精致色条 + 左对齐编辑式信息层级，确保教室号完整可见绝不截断
+            val wideTitleSize = (12.8f * style.fontScale).sp
+            val wideSubSize = (10.5f * style.fontScale).sp
+            val wideTimeSize = (9.8f * style.fontScale).sp
             val wideTimeStr = timeTextToShow ?: run {
                 val startSlot = timeSlots.find { it.number == course.startSection }
                 val endSlot = timeSlots.find { it.number == course.endSection }
                 if (startSlot != null && endSlot != null) "${startSlot.startTime}-${endSlot.endTime}" else null
             }
             val widePos = androidx.compose.runtime.remember(course.position, style.removeLocationAt) {
-                val raw = if (style.removeLocationAt) course.position.trim().removePrefix("@").trim() else course.position.trim()
-                raw.replace(Regex("\\s+"), " · ")
+                formatCourseLocationCompact(course.position, style.removeLocationAt)
             }
             val accentStripeColor = if (textColor == Color.White) {
                 Color.White.copy(alpha = 0.55f)
@@ -191,7 +191,7 @@ fun CourseBlock(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                    .padding(horizontal = 7.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 Box(
@@ -201,7 +201,7 @@ fun CourseBlock(
                         .clip(RoundedCornerShape(2.dp))
                         .background(accentStripeColor)
                 )
-                Spacer(modifier = Modifier.width(7.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.Start,
@@ -209,57 +209,64 @@ fun CourseBlock(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.Start,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
                         Text(
                             text = course.name,
                             fontSize = wideTitleSize,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.1.sp,
+                            letterSpacing = 0.05.sp,
                             color = textColor,
                             maxLines = if (isTallWideCell) 2 else 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Start,
-                            style = TextStyle(lineHeight = 1.24.em, shadow = cardTextShadow)
+                            style = TextStyle(lineHeight = 1.20.em, shadow = cardTextShadow)
                         )
                         if (showLocation && widePos.isNotBlank()) {
                             Text(
                                 text = widePos,
                                 fontSize = wideSubSize,
                                 fontWeight = FontWeight.Medium,
-                                color = textColor.copy(alpha = 0.90f),
-                                maxLines = 1,
+                                color = textColor.copy(alpha = 0.92f),
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Start,
                                 style = TextStyle(lineHeight = 1.18.em, shadow = cardTextShadow)
                             )
                         }
+                        if (showTeacher && isExtraTallWideCell) {
+                            Text(
+                                text = course.teacher,
+                                fontSize = wideTimeSize,
+                                color = textColor.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Start,
+                                style = TextStyle(lineHeight = 1.12.em, shadow = cardTextShadow)
+                            )
+                        }
                     }
 
-                    if (isTallWideCell && (wideTimeStr != null || showTeacher)) {
-                        val footerMeta = buildList {
-                            if (wideTimeStr != null) add(wideTimeStr)
-                            if (showTeacher) add(course.teacher)
-                        }.joinToString(" · ")
-                        if (footerMeta.isNotBlank()) {
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        color = Color.Black.copy(alpha = 0.14f),
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = footerMeta,
-                                    fontSize = wideTimeSize,
-                                    fontWeight = FontWeight.Medium,
-                                    color = textColor.copy(alpha = 0.95f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
+                    if (isTallWideCell && wideTimeStr != null) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .background(
+                                    color = Color.Black.copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(6.dp)
                                 )
-                            }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = wideTimeStr,
+                                fontSize = wideTimeSize,
+                                fontWeight = FontWeight.Medium,
+                                color = textColor.copy(alpha = 0.95f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(lineHeight = 1.1.em, shadow = cardTextShadow)
+                            )
                         }
                     }
                 }

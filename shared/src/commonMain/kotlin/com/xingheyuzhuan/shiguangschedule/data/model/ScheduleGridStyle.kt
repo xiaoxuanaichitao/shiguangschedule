@@ -52,6 +52,9 @@ data class ScheduleGridStyle(
     val timeColumnWidthDp: Float = DEFAULT_TIME_COLUMN_WIDTH,
     val dayHeaderHeightDp: Float = DEFAULT_DAY_HEADER_HEIGHT,
     val sectionHeightDp: Float = DEFAULT_SECTION_HEIGHT,
+    val hasCustomTimeColumnWidth: Boolean = false,
+    val hasCustomDayHeaderHeight: Boolean = false,
+    val hasCustomSectionHeight: Boolean = false,
 
     // CourseBlock 外观 (单位: Float/Dp & Float)
     val courseBlockCornerRadiusDp: Float = DEFAULT_BLOCK_CORNER_RADIUS,
@@ -94,6 +97,10 @@ data class ScheduleGridStyle(
         val DEFAULT_TIME_COLUMN_WIDTH = 42f
         val DEFAULT_DAY_HEADER_HEIGHT = 52f
         val DEFAULT_SECTION_HEIGHT = 64f
+        // 平板宽屏专属默认参数（格子高度 59 / 侧边栏宽度 42 / 顶部表头高度 42）
+        val TABLET_DEFAULT_TIME_COLUMN_WIDTH = 42f
+        val TABLET_DEFAULT_DAY_HEADER_HEIGHT = 42f
+        val TABLET_DEFAULT_SECTION_HEIGHT = 59f
         val DEFAULT_BLOCK_CORNER_RADIUS = 11f
         val DEFAULT_BLOCK_OUTER_PADDING = 2f
         val DEFAULT_BLOCK_INNER_PADDING = 5f
@@ -200,6 +207,9 @@ fun ScheduleGridStyleProto.toCompose(): ScheduleGridStyle {
         timeColumnWidthDp = this.time_column_width_dp ?: d.timeColumnWidthDp,
         dayHeaderHeightDp = this.day_header_height_dp ?: d.dayHeaderHeightDp,
         sectionHeightDp = this.section_height_dp ?: d.sectionHeightDp,
+        hasCustomTimeColumnWidth = this.time_column_width_dp != null,
+        hasCustomDayHeaderHeight = this.day_header_height_dp != null,
+        hasCustomSectionHeight = this.section_height_dp != null,
 
         // 2. 课程块外观
         courseBlockCornerRadiusDp = this.course_block_corner_radius_dp ?: d.courseBlockCornerRadiusDp,

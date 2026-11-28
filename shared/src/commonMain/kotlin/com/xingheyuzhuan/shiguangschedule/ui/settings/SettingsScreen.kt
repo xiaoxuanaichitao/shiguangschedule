@@ -209,6 +209,7 @@ fun SettingsScreen(
                     AppearanceQuickSection(
                         selectedThemeMode = appSettings.themeMode,
                         onThemeModeSelected = viewModel::onThemeModeChanged,
+                        onPersonalizationClick = { onNavigate(Destination.StyleSettings) },
                         onThemeSettingsClick = { onNavigate(Destination.ThemeSettings) },
                         cardBgColor = cardBgColor,
                         cardBorderColor = cardBorderColor
@@ -323,6 +324,7 @@ fun SettingsScreen(
 private fun AppearanceQuickSection(
     selectedThemeMode: AppThemeMode,
     onThemeModeSelected: (AppThemeMode) -> Unit,
+    onPersonalizationClick: () -> Unit,
     onThemeSettingsClick: () -> Unit,
     cardBgColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
     cardBorderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
@@ -337,7 +339,7 @@ private fun AppearanceQuickSection(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CumtSectionHeader(
-                title = "外观与界面字号"
+                title = "外观与个性化"
             )
 
             CumtSegmentedBar(
@@ -346,6 +348,14 @@ private fun AppearanceQuickSection(
                 onSelect = { index -> onThemeModeSelected(AppThemeMode.entries[index]) },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            SettingItem(
+                title = "壁纸与课表个性化",
+                subtitle = "自定义浅/深色背景、各页壁纸同步、格子高度与课程配色",
+                onClick = onPersonalizationClick
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
             SettingItem(
                 title = "主题配色与软件字号",
